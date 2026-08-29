@@ -233,12 +233,10 @@
   align-items: center;
   -webkit-backdrop-filter: blur(22px) saturate(145%);
   backdrop-filter: blur(22px) saturate(145%);
-  background:
-    radial-gradient(circle at 3% 0%, rgb(255 255 255 / 96%), transparent 36%),
-    linear-gradient(145deg, rgb(255 255 255 / 86%), rgb(255 255 255 / 60%));
-  border: 1px solid rgb(255 255 255 / 94%);
+  background: var(--card-surface);
+  border: 1px solid var(--card-border);
   border-radius: 24px;
-  box-shadow: 0 24px 54px rgb(56 65 79 / 14%), 0 7px 18px rgb(56 65 79 / 9%), 0 0 0 1px rgb(56 65 79 / 7%), inset 0 1px 0 #fff, inset 0 -1px 0 rgb(56 65 79 / 6%);
+  box-shadow: var(--card-shadow);
   display: grid;
   gap: 0;
   grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
@@ -252,7 +250,7 @@
 }
 
 .article-card-link::before {
-  background: linear-gradient(90deg, transparent 2%, rgb(255 255 255 / 96%) 28%, rgb(255 255 255 / 72%) 72%, transparent 98%);
+  background: linear-gradient(90deg, transparent 2%, var(--glass-highlight) 28%, var(--glass-border) 72%, transparent 98%);
   content: "";
   height: 1px;
   left: 18px;
@@ -356,11 +354,9 @@
 }
 
 .article-card-link:hover {
-  background:
-    radial-gradient(circle at 3% 0%, #fff, transparent 38%),
-    linear-gradient(145deg, rgb(255 255 255 / 94%), rgb(255 255 255 / 72%));
-  border-color: #fff;
-  box-shadow: 0 32px 72px rgb(56 65 79 / 17%), 0 10px 24px rgb(56 65 79 / 10%), 0 0 0 1px rgb(56 65 79 / 7%), inset 0 1px 0 #fff, inset 0 -1px 0 rgb(56 65 79 / 5%);
+  background: var(--card-surface-hover);
+  border-color: var(--card-border);
+  box-shadow: var(--card-shadow-hover);
   transform: translateY(-3px) scale(1.002);
 }
 

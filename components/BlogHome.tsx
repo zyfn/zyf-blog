@@ -9,7 +9,7 @@ export function BlogHome({ articles }: { articles: ArticleSummary[] }) {
 
   return (
     <>
-      <SiteHeader />
+      <SiteHeader active="home" />
 
       <main className="curated-home page-frame">
         <section className="home-hero" aria-labelledby="home-title">

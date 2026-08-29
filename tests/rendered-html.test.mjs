@@ -29,7 +29,7 @@ test("server-renders the editorial home without database content", async () => {
   assert.match(html, />About <span[^>]*>→<\/span><\/a>/);
   assert.match(html, />Blog <span[^>]*>→<\/span><\/a>/);
   assert.match(html, /aria-label="主导航"/);
-  assert.match(html, />Blog<|>About</);
+  assert.match(html, />Home<|>Blog<|>About</);
   assert.match(html, /images\/profile\/zyf\.jpg/);
   assert.doesNotMatch(html, /site-logo-wordmark|site-global-search|>首页</);
   assert.match(html, /href="\/posts"/);
@@ -40,12 +40,17 @@ test("server-renders the editorial home without database content", async () => {
 });
 
 test("uses repository MDX as the only publishing source", async () => {
-  const [blogSource, explorerSource, homeSource, cardSource, headerSource, postPageSource, mdxSource, packageJson, readme] = await Promise.all([
+  const [blogSource, explorerSource, homeSource, cardSource, headerSource, themeSource, tocSource, layoutSource, baseStyles, contentStyles, postPageSource, mdxSource, packageJson, readme] = await Promise.all([
     readFile(new URL("../lib/blog.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/ArticleExplorer.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/BlogHome.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/ArticleCard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/SiteHeader.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/ThemeToggle.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/ArticleToc.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/styles/base.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/styles/content.css", import.meta.url), "utf8"),
     readFile(new URL("../app/posts/[slug]/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/MdxArticle.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
@@ -68,9 +73,22 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.doesNotMatch(homeSource, /index-footer/);
   assert.doesNotMatch([homeSource, cardSource, headerSource, postPageSource, mdxSource].join("\n"), /from ["']next\/link["']/);
   assert.doesNotMatch(headerSource, />首页</);
+  assert.match(headerSource, /href="\/">Home/);
   assert.match(headerSource, /href="\/posts">Blog/);
   assert.match(headerSource, /href="\/about">About/);
   assert.doesNotMatch(headerSource, /site-global-search|搜索文章/);
+  assert.match(headerSource, /<ThemeToggle/);
+  assert.match(themeSource, /localStorage\.setItem\("zyf-theme"/);
+  assert.match(layoutSource, /localStorage\.getItem\("zyf-theme"/);
+  assert.match(baseStyles, /:root\[data-theme="dark"\]/);
+  assert.match(baseStyles, /\.site-header \{[\s\S]*?position: relative;/);
+  assert.doesNotMatch(baseStyles.match(/\.site-header \{[\s\S]*?\n\}/)?.[0] ?? "", /position: sticky|position: fixed/);
+  assert.match(contentStyles, /\.article-toc nav \{[\s\S]*?overflow-y: auto;/);
+  assert.match(tocSource, /aria-expanded=\{!collapsed\}/);
+  assert.match(tocSource, /展开阅读目录/);
+  assert.match(contentStyles, /\.article-layout:has\(\.article-toc\[data-collapsed="true"\]\)/);
+  assert.doesNotMatch(postPageSource, /<span>ZYF<\/span>/);
+  assert.ok(postPageSource.indexOf('className="post-hero-meta"') > postPageSource.indexOf('className="post-byline"'));
   assert.match(readme, /content\/posts\/<slug>\.mdx/);
   assert.doesNotMatch(packageJson, /drizzle|libsql|vercel\/blob|db:generate|tailwind/);
 

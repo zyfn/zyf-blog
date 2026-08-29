@@ -1,6 +1,7 @@
 import { SiteLogo } from "@/components/SiteLogo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
-type SiteSection = "articles" | "about";
+type SiteSection = "home" | "articles" | "about";
 
 export function SiteHeader({ active }: { active?: SiteSection }) {
   return (
@@ -10,9 +11,11 @@ export function SiteHeader({ active }: { active?: SiteSection }) {
           <SiteLogo />
         </a>
         <nav className="site-global-nav" aria-label="主导航">
+          <a aria-current={active === "home" ? "page" : undefined} href="/">Home</a>
           <a aria-current={active === "articles" ? "page" : undefined} href="/posts">Blog</a>
           <a aria-current={active === "about" ? "page" : undefined} href="/about">About</a>
         </nav>
+        <ThemeToggle />
       </div>
     </header>
   );

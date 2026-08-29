@@ -15,6 +15,12 @@
   --accent-soft: #f8e3dd;
   --code-background: #1d1e20;
   --code-text: #f3f3f1;
+  --glass: rgb(255 255 255 / 52%);
+  --glass-strong: rgb(255 255 255 / 72%);
+  --glass-border: rgb(29 29 31 / 14%);
+  --glass-highlight: rgb(255 255 255 / 78%);
+  --glass-shadow: 0 18px 50px rgb(48 42 38 / 10%), inset 0 1px 0 var(--glass-highlight);
+  --press-shadow: 0 10px 26px rgb(48 42 38 / 9%), inset 0 1px 0 var(--glass-highlight);
   --page: min(1120px, calc(100vw - 64px));
   --reader: min(1120px, calc(100vw - 64px));
   --sans: var(--font-geist-sans), "PingFang SC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
@@ -36,6 +42,12 @@
     --accent-soft: #32201c;
     --code-background: #151619;
     --code-text: #f4f4f2;
+    --glass: rgb(31 34 40 / 58%);
+    --glass-strong: rgb(38 41 47 / 76%);
+    --glass-border: rgb(255 255 255 / 14%);
+    --glass-highlight: rgb(255 255 255 / 10%);
+    --glass-shadow: 0 22px 58px rgb(0 0 0 / 28%), inset 0 1px 0 var(--glass-highlight);
+    --press-shadow: 0 12px 30px rgb(0 0 0 / 24%), inset 0 1px 0 var(--glass-highlight);
   }
 }
 
@@ -48,7 +60,10 @@ html {
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(circle at 82% 12%, color-mix(in srgb, var(--accent), transparent 94%), transparent 27rem),
+    radial-gradient(circle at 16% 78%, color-mix(in srgb, var(--text), transparent 98%), transparent 32rem),
+    var(--background);
   color: var(--text);
   font-family: var(--sans);
   font-size: 17px;
@@ -58,6 +73,17 @@ body {
   min-width: 320px;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+}
+
+body::before {
+  background-image: radial-gradient(rgb(255 255 255 / 8%) 0.55px, transparent 0.55px);
+  background-size: 4px 4px;
+  content: "";
+  inset: 0;
+  opacity: 0.16;
+  pointer-events: none;
+  position: fixed;
+  z-index: -1;
 }
 
 a {
@@ -114,13 +140,13 @@ img {
 }
 
 .site-header {
-  background: color-mix(in srgb, var(--background), transparent 10%);
+  background: color-mix(in srgb, var(--background), transparent 18%);
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
   z-index: 20;
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
-  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(165%);
+  backdrop-filter: blur(28px) saturate(165%);
 }
 
 .header-inner {
@@ -139,14 +165,17 @@ img {
 }
 
 .brand {
-  border-radius: 12px;
+  border-radius: 15px;
+  transition: filter 180ms ease, transform 160ms ease;
 }
 
 .site-logo-tile {
-  background: #171719;
-  border: 1px solid rgb(255 255 255 / 8%);
-  border-radius: 13px;
-  box-shadow: 0 7px 22px rgb(0 0 0 / 13%), inset 0 1px 0 rgb(255 255 255 / 8%);
+  -webkit-backdrop-filter: blur(18px) saturate(155%);
+  backdrop-filter: blur(18px) saturate(155%);
+  background: color-mix(in srgb, #171719, transparent 7%);
+  border: 1px solid rgb(255 255 255 / 13%);
+  border-radius: 14px;
+  box-shadow: 0 10px 26px rgb(0 0 0 / 20%), inset 0 1px 0 rgb(255 255 255 / 10%);
   height: 44px;
   width: 44px;
 }
@@ -171,43 +200,66 @@ img {
 .site-global-nav {
   align-items: center;
   display: flex;
-}
-
-.site-global-nav {
-  gap: clamp(24px, 3vw, 40px);
+  -webkit-backdrop-filter: blur(22px) saturate(165%);
+  backdrop-filter: blur(22px) saturate(165%);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  box-shadow: var(--press-shadow);
+  gap: 4px;
+  padding: 4px;
+  position: relative;
 }
 
 .site-global-nav a {
+  border: 1px solid transparent;
+  border-radius: 999px;
   color: var(--text-muted);
   font-size: 1rem;
   font-weight: 580;
-  padding-block: 25px;
+  line-height: 1;
+  min-width: 82px;
+  padding: 12px 18px;
   position: relative;
-  transition: color 160ms ease;
+  text-align: center;
+  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, color 160ms ease, transform 120ms ease;
 }
 
 .site-global-nav a::after {
   background: var(--accent);
-  border-radius: 2px;
-  bottom: 17px;
+  border-radius: 50%;
+  bottom: 4px;
   content: "";
-  height: 2px;
+  height: 4px;
   left: 50%;
   opacity: 0;
   position: absolute;
-  transform: translateX(-50%) scaleX(0.4);
+  transform: translateX(-50%) scale(0.5);
   transition: opacity 160ms ease, transform 180ms ease;
-  width: 18px;
+  width: 4px;
 }
 
 .site-global-nav a:hover,
 .site-global-nav a[aria-current="page"] {
+  background: var(--glass-strong);
+  border-color: var(--glass-border);
+  box-shadow: 0 5px 14px rgb(0 0 0 / 12%), inset 0 1px 0 var(--glass-highlight);
   color: var(--text);
 }
 
 .site-global-nav a[aria-current="page"]::after {
   opacity: 1;
-  transform: translateX(-50%) scaleX(1);
+  transform: translateX(-50%) scale(1);
+}
+
+.brand:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.brand:active,
+.site-global-nav a:active {
+  transform: scale(0.96) translateY(1px);
 }
 
 .button {
@@ -250,15 +302,17 @@ img {
   }
 
   .site-global-nav {
-    gap: 26px;
+    gap: 3px;
+    padding: 3px;
   }
 
   .site-global-nav a {
-    padding-block: 20px;
+    min-width: 68px;
+    padding: 10px 14px;
   }
 
   .site-global-nav a::after {
-    bottom: 13px;
+    bottom: 3px;
   }
 }
 
@@ -277,9 +331,32 @@ img {
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .site-header {
+  .site-header,
+  .site-global-nav,
+  .site-logo-tile,
+  .home-hero-actions a,
+  .article-card-link,
+  .article-card-tags > span,
+  .post-search input,
+  .about-person,
+  .back-link,
+  .post-hero-meta span,
+  .article-toc,
+  .mdx-callout {
     background: var(--background);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .site-global-nav,
+  .home-hero-actions a,
+  .article-card-link,
+  .post-search input,
+  .about-person,
+  .back-link,
+  .article-toc {
+    border-color: var(--line-strong);
   }
 }

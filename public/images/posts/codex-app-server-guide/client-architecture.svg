@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="660" viewBox="0 0 1200 660" role="img" aria-labelledby="title desc">
+  <title id="title">Production Codex App Server client architecture</title>
+  <desc id="desc">A layered client with business UI, RPC and event control, transport, and Codex App Server.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#667085"/></marker>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#101828" flood-opacity=".08"/></filter>
+  </defs>
+  <rect width="1200" height="660" rx="30" fill="#f7f7f5"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif">
+    <text x="70" y="78" fill="#161616" font-size="28" font-weight="700">Production client layers</text>
+    <text x="70" y="112" fill="#667085" font-size="18">Keep transport, protocol state, user decisions and business state separate.</text>
+    <g fill="none" stroke="#98a2b3" stroke-width="3" marker-end="url(#arrow)">
+      <path d="M300 230H390"/><path d="M810 230H900"/><path d="M600 302V368"/><path d="M600 452V508"/>
+    </g>
+    <g filter="url(#shadow)">
+      <rect x="70" y="174" width="230" height="112" rx="22" fill="#fff" stroke="#deded8"/>
+      <rect x="390" y="164" width="420" height="138" rx="24" fill="#fff" stroke="#ff6b4a" stroke-width="2"/>
+      <rect x="900" y="174" width="230" height="112" rx="22" fill="#fff" stroke="#deded8"/>
+      <rect x="390" y="368" width="420" height="84" rx="22" fill="#eeeef2" stroke="#deded8"/>
+      <rect x="390" y="508" width="420" height="84" rx="22" fill="#171719"/>
+    </g>
+    <g text-anchor="middle">
+      <text x="185" y="220" fill="#161616" font-size="22" font-weight="680">UI / Dashboard</text>
+      <text x="185" y="251" fill="#667085" font-size="17">Business state</text>
+      <text x="600" y="202" fill="#161616" font-size="23" font-weight="700">App Server Client</text>
+      <text x="600" y="238" fill="#667085" font-size="17">RPC map · request router · event reducer</text>
+      <text x="600" y="269" fill="#ff5a36" font-size="16" font-weight="650">protocol and interaction control</text>
+      <text x="1015" y="220" fill="#161616" font-size="22" font-weight="680">Human decisions</text>
+      <text x="1015" y="251" fill="#667085" font-size="17">Approval · input · tools</text>
+      <text x="600" y="405" fill="#344054" font-size="22" font-weight="680">Transport</text>
+      <text x="600" y="432" fill="#667085" font-size="16">stdio · WebSocket · Unix socket</text>
+      <text x="600" y="558" fill="#fff" font-size="23" font-weight="700">codex app-server</text>
+      <text x="600" y="582" fill="#b8bac2" font-size="16">Thread · Turn · Item · runtime events</text>
+    </g>
+  </g>
+</svg>

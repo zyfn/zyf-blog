@@ -7,9 +7,11 @@
   },
   "scripts": {
     "dev": "vinext dev",
+    "prebuild": "npm run content:check",
     "build": "NITRO_PRESET=vercel vite build",
     "build:test": "vinext build",
-    "test": "npm run build:test && node --test tests/rendered-html.test.mjs",
+    "content:check": "node scripts/check-content.mjs",
+    "test": "npm run content:check && npm run build:test && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .vercel"
   },
   "dependencies": {

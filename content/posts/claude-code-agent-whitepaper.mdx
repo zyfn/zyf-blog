@@ -75,18 +75,11 @@ Claude Code 官方将工作过程描述为不断交织的三个阶段：收集�
 
 聊天式助手以“回答”为工作单位；研发 Agent 以“状态变化”为工作单位。Claude Code 通过搜索文件、读取实现、执行命令、观察失败和修改代码逐步修复 Bug，每一轮结果都会校正下一轮判断。
 
-```mermaid
-flowchart LR
-    A["目标与边界"] --> B["收集上下文"]
-    B --> C["形成当前假设"]
-    C --> D["调用工具并改变状态"]
-    D --> E["读取结果与证据"]
-    E --> F{"满足验收？"}
-    F -- "否" --> B
-    F -- "是" --> G["交付证据与剩余风险"]
-    P["Permission · Sandbox · Hook · Policy"] -. "约束" .-> D
-    H["人类判断"] -. "澄清 / 中断 / 接管" .-> C
-```
+<Figure
+  src="/images/posts/claude-code-agent-whitepaper/agent-loop.svg"
+  alt="Claude Code Agent Loop，从目标与上下文经过假设、行动和证据循环到验收，并受到权限策略与人类判断约束"
+  caption="Agent Loop 把模型决策、工具行动和外部证据连接起来；权限边界与人类判断始终位于循环之外。"
+/>
 
 这张图澄清了三个容易混淆的事实。
 

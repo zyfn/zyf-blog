@@ -80,19 +80,11 @@ Agent 判断 → 工具行动 → 环境结果 → 验证与修正
 
 Codex CLI 的官方定位是让 Agent 在终端中检查代码、修改文件、运行命令，并通过 `codex exec` 进入脚本与 CI。[Codex CLI](https://learn.chatgpt.com/docs/codex/cli) Desktop、IDE 与 Cloud 改变了交互和环境，但没有取消同一个基本循环。
 
-```mermaid
-flowchart TB
-    A["目标、范围与验收"] --> B["选择运行面"]
-    B --> C["加载仓库、指令与配置"]
-    C --> D["Agent 形成计划或当前假设"]
-    D --> E["文件 / Shell / Web / MCP / App 行动"]
-    E --> F["测试、Diff、Review 与外部结果"]
-    F --> G{"满足完成协议？"}
-    G -- "否" --> D
-    G -- "是" --> H["结构化交付与剩余风险"]
-    P["Sandbox · Approval · Hook · Policy"] -. "限制" .-> E
-    S["Thread / Chat · Turn · Item · Worktree"] -. "保存状态" .-> D
-```
+<Figure
+  src="/images/posts/codex-agent-whitepaper/agent-loop.svg"
+  alt="Codex 执行与控制循环，从目标和运行面经过上下文、行动与证据推进到完成协议，并由权限控制和状态模型支撑"
+  caption="执行面决定行动在哪里发生，控制面限制行动并保存过程；二者共同决定结果能否被验证和恢复。"
+/>
 
 这套模型把 Codex 分为两部分：
 

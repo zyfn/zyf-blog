@@ -1,4 +1,4 @@
-import { Children, isValidElement, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { MdxContent } from "@/lib/blog";
 
 function Callout({ children, title }: { children?: ReactNode; title?: string }) {
@@ -10,31 +10,15 @@ function Callout({ children, title }: { children?: ReactNode; title?: string }) 
   );
 }
 
-function Diagram({ source }: { source: string }) {
-  const nodes = Array.from(source.matchAll(/(?:\["([^"]+)"\]|\{"([^"]+)"\})/g)).map((match) => ({
-    label: (match[1] ?? match[2]).replace(/<br\s*\/?\s*>/gi, " / ").replaceAll(" · ", " / "),
-    decision: Boolean(match[2]),
-  }));
-  const uniqueNodes = nodes.filter(
-    (node, index) => nodes.findIndex((candidate) => candidate.label === node.label) === index,
-  );
-
+function Figure({ alt, caption, src }: { alt: string; caption?: string; src: string }) {
   return (
-    <div className="architecture-visual" role="img" aria-label="能力架构示意图">
-      <ol className="architecture-flow">
-        {uniqueNodes.map((node) => <li className={node.decision ? "is-decision" : ""} key={node.label}><strong>{node.label}</strong></li>)}
-      </ol>
-    </div>
+    <figure className="mdx-figure">
+      {/* MDX assets have author-controlled dimensions and aspect ratios. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img alt={alt} decoding="async" loading="lazy" src={src} />
+      {caption ? <figcaption>{caption}</figcaption> : null}
+    </figure>
   );
-}
-
-function CodeFrame({ children }: { children?: ReactNode }) {
-  const child = Children.toArray(children)[0];
-  if (isValidElement<{ className?: string; children?: ReactNode }>(child)) {
-    const className = child.props.className ?? "";
-    if (className.includes("language-mermaid")) return <Diagram source={String(child.props.children ?? "")} />;
-  }
-  return <pre>{children}</pre>;
 }
 
 export function MdxArticle({ Content }: { Content: MdxContent }) {
@@ -43,11 +27,11 @@ export function MdxArticle({ Content }: { Content: MdxContent }) {
       <Content
         components={{
           Callout,
+          Figure,
           a: ({ href, children }: { href?: string; children?: ReactNode }) => {
             const external = href?.startsWith("http");
             return <a href={href} rel={external ? "noreferrer" : undefined} target={external ? "_blank" : undefined}>{children}</a>;
           },
-          pre: CodeFrame,
           table: ({ children }: { children?: ReactNode }) => <div className="table-scroll"><table>{children}</table></div>,
         }}
       />

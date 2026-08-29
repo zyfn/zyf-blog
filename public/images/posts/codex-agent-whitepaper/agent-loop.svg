@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="540" viewBox="0 0 1200 540" role="img" aria-labelledby="title desc">
+  <title id="title">Codex execution and control loop</title>
+  <desc id="desc">The goal moves through runtime selection, context loading, action and evidence until the completion protocol is satisfied.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#667085"/></marker>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#101828" flood-opacity=".08"/></filter>
+  </defs>
+  <rect width="1200" height="540" rx="30" fill="#f7f7f5"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif" text-anchor="middle">
+    <g fill="none" stroke="#98a2b3" stroke-width="3" marker-end="url(#arrow)">
+      <path d="M205 212H270"/><path d="M415 212H480"/><path d="M625 212H690"/><path d="M835 212H900"/>
+      <path d="M1018 284C1018 408 585 420 342 284"/>
+    </g>
+    <g filter="url(#shadow)">
+      <rect x="55" y="150" width="150" height="124" rx="22" fill="#fff" stroke="#deded8"/>
+      <rect x="270" y="150" width="145" height="124" rx="22" fill="#fff" stroke="#deded8"/>
+      <rect x="480" y="150" width="145" height="124" rx="22" fill="#fff" stroke="#deded8"/>
+      <rect x="690" y="150" width="145" height="124" rx="22" fill="#fff" stroke="#deded8"/>
+      <path d="M1018 140l82 72-82 72-82-72z" fill="#fff7f3" stroke="#ff6b4a" stroke-width="2"/>
+    </g>
+    <g fill="#161616" font-size="21" font-weight="650">
+      <text x="130" y="198">目标与验收</text><text x="130" y="231" fill="#667085" font-size="17" font-weight="500">Contract</text>
+      <text x="342" y="198">选择运行面</text><text x="342" y="231" fill="#667085" font-size="17" font-weight="500">Runtime</text>
+      <text x="552" y="198">加载上下文</text><text x="552" y="231" fill="#667085" font-size="17" font-weight="500">Context</text>
+      <text x="762" y="198">行动与证据</text><text x="762" y="231" fill="#667085" font-size="17" font-weight="500">Act · Verify</text>
+      <text x="1018" y="205">完成协议？</text><text x="1018" y="237" fill="#ff5a36" font-size="17" font-weight="600">Complete?</text>
+    </g>
+    <g>
+      <rect x="118" y="374" width="430" height="82" rx="19" fill="#eeeef2"/>
+      <rect x="652" y="374" width="430" height="82" rx="19" fill="#fff1ec"/>
+      <text x="333" y="406" fill="#344054" font-size="19" font-weight="650">Sandbox · Approval · Hook · Policy</text>
+      <text x="333" y="434" fill="#667085" font-size="16">控制面限制行动边界</text>
+      <text x="867" y="406" fill="#344054" font-size="19" font-weight="650">Thread · Turn · Item · Worktree</text>
+      <text x="867" y="434" fill="#667085" font-size="16">状态面保存过程与恢复位置</text>
+    </g>
+  </g>
+</svg>

@@ -15,8 +15,8 @@
   --accent-soft: #f8e3dd;
   --code-background: #1d1e20;
   --code-text: #f3f3f1;
-  --page: min(1320px, calc(100vw - 64px));
-  --reader: min(1180px, calc(100vw - 64px));
+  --page: min(1120px, calc(100vw - 64px));
+  --reader: min(1120px, calc(100vw - 64px));
   --sans: var(--font-geist-sans), "PingFang SC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
   --mono: var(--font-geist-mono), "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
 }

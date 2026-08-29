@@ -169,21 +169,19 @@
   padding-bottom: 20px;
 }
 
-.home-section-heading h2,
-.home-section-heading a {
-  font-size: clamp(1.15rem, 1.5vw, 1.4rem);
-  line-height: 1.25;
-}
-
 .home-section-heading h2 {
+  font-size: clamp(1.2rem, 1.55vw, 1.45rem);
   font-weight: 650;
   letter-spacing: -0.035em;
+  line-height: 1.25;
   margin: 0;
 }
 
 .home-section-heading a {
   color: var(--text-muted);
-  font-weight: 550;
+  font-size: clamp(1.12rem, 1.35vw, 1.28rem);
+  font-weight: 610;
+  line-height: 1.25;
   transition: color 160ms ease;
 }
 
@@ -226,15 +224,9 @@
 
 .home-latest-meta {
   color: var(--text-muted);
-  display: flex;
-  flex-wrap: wrap;
+  display: block;
   font-size: 1rem;
-  gap: 8px 15px;
-}
-
-.home-latest-meta b {
-  color: var(--accent);
-  font-weight: 650;
+  font-variant-numeric: tabular-nums;
 }
 
 .home-latest-row h3 {

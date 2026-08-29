@@ -44,7 +44,7 @@ export function BlogHome({ articles }: { articles: ArticleSummary[] }) {
                     {article.coverImage ? <img alt="" loading="lazy" src={article.coverImage} /> : <span />}
                   </a>
                   <a className="home-latest-main" href={`/posts/${article.slug}`}>
-                    <span className="home-latest-meta"><b>{article.featured ? "Featured" : article.tags[0] ?? "Post"}</b><time>{article.updated}</time></span>
+                    <time className="home-latest-meta">{article.updated}</time>
                     <h3>{article.title}</h3>
                     <p>{article.dek}</p>
                   </a>

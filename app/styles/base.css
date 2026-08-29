@@ -49,6 +49,24 @@ html {
   }
 }
 
+@keyframes page-exit {
+  to {
+    opacity: 0;
+  }
+}
+
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root) {
+  animation: page-exit 150ms ease-out both;
+}
+
+::view-transition-new(root) {
+  animation: page-enter 360ms var(--ease-fluid) both;
+}
+
 body {
   background:
     radial-gradient(circle at 82% 10%, rgb(230 93 67 / 13%), transparent 30rem),
@@ -311,6 +329,11 @@ img {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.01ms !important;
   }
 }
 

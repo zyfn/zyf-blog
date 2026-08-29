@@ -1,5 +1,4 @@
 /* eslint-disable @next/next/no-img-element -- vinext's next/image shim breaks React hooks during hydration. */
-import Link from "next/link";
 import type { ArticleSummary } from "@/lib/articles";
 import { ArticleCard } from "@/components/ArticleCard";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -19,8 +18,8 @@ export function BlogHome({ articles }: { articles: ArticleSummary[] }) {
             <p className="home-hero-role">Agent Infra Engineer In Alibaba</p>
             <p className="home-hero-focus">Working across <TypewriterLine /></p>
             <div className="home-hero-actions">
-              <Link className="home-primary-link" href="/about">About <span aria-hidden="true">→</span></Link>
-              <Link href="/posts">Blog <span aria-hidden="true">→</span></Link>
+              <a className="home-primary-link" href="/about">About <span aria-hidden="true">→</span></a>
+              <a href="/posts">Blog <span aria-hidden="true">→</span></a>
             </div>
           </div>
 
@@ -35,7 +34,7 @@ export function BlogHome({ articles }: { articles: ArticleSummary[] }) {
         <section className="home-latest" aria-labelledby="latest-title">
           <header className="home-section-heading">
             <h2 id="latest-title">Latest Updates</h2>
-            <Link href="/posts">View All <span aria-hidden="true">→</span></Link>
+            <a href="/posts">View All <span aria-hidden="true">→</span></a>
           </header>
 
           {latestArticles.length ? (

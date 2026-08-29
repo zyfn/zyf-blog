@@ -1,5 +1,4 @@
 /* eslint-disable @next/next/no-img-element -- vinext's next/image shim breaks React hooks during hydration. */
-import Link from "next/link";
 import type { ArticleSummary } from "@/lib/articles";
 
 type ArticleCardProps = {
@@ -12,7 +11,7 @@ export function ArticleCard({ article, headingLevel = "h3" }: ArticleCardProps) 
 
   return (
     <article className="article-card-row">
-      <Link className="article-card-link" href={`/posts/${article.slug}`}>
+      <a className="article-card-link" href={`/posts/${article.slug}`}>
         <span className="article-card-image" aria-hidden="true">
           {article.coverImage ? <img alt="" loading="lazy" src={article.coverImage} /> : <span />}
         </span>
@@ -28,7 +27,7 @@ export function ArticleCard({ article, headingLevel = "h3" }: ArticleCardProps) 
             </div>
           ) : null}
         </div>
-      </Link>
+      </a>
     </article>
   );
 }

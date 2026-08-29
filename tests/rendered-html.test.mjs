@@ -40,12 +40,14 @@ test("server-renders the editorial home without database content", async () => {
 });
 
 test("uses repository MDX as the only publishing source", async () => {
-  const [blogSource, explorerSource, homeSource, cardSource, headerSource, packageJson, readme] = await Promise.all([
+  const [blogSource, explorerSource, homeSource, cardSource, headerSource, postPageSource, mdxSource, packageJson, readme] = await Promise.all([
     readFile(new URL("../lib/blog.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/ArticleExplorer.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/BlogHome.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/ArticleCard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/SiteHeader.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/posts/[slug]/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/MdxArticle.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../README.md", import.meta.url), "utf8"),
   ]);
@@ -64,6 +66,7 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.match(cardSource, /article-card-tags/);
   assert.doesNotMatch(cardSource, /author|avatar|readTime|readingTime/);
   assert.doesNotMatch(homeSource, /index-footer/);
+  assert.doesNotMatch([homeSource, cardSource, headerSource, postPageSource, mdxSource].join("\n"), /from ["']next\/link["']/);
   assert.doesNotMatch(headerSource, />首页</);
   assert.match(headerSource, /href="\/posts">Blog/);
   assert.match(headerSource, /href="\/about">About/);

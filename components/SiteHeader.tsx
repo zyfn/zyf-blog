@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SiteLogo } from "@/components/SiteLogo";
 
 type SiteSection = "articles" | "about";
@@ -6,12 +7,12 @@ export function SiteHeader({ active }: { active?: SiteSection }) {
   return (
     <header className="site-header">
       <div className="page-frame header-inner">
-        <a className="brand" href="/" aria-label="ZYF 首页">
+        <Link className="brand" href="/" aria-label="ZYF 首页">
           <SiteLogo />
-        </a>
+        </Link>
         <nav className="site-global-nav" aria-label="主导航">
-          <a aria-current={active === "articles" ? "page" : undefined} href="/posts">Blog</a>
-          <a aria-current={active === "about" ? "page" : undefined} href="/about">About</a>
+          <Link aria-current={active === "articles" ? "page" : undefined} href="/posts">Blog</Link>
+          <Link aria-current={active === "about" ? "page" : undefined} href="/about">About</Link>
         </nav>
       </div>
     </header>

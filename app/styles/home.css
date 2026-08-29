@@ -98,7 +98,7 @@
   gap: 9px;
   min-height: 44px;
   padding: 0 17px;
-  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, color 160ms ease, transform 120ms ease;
+  transition: background-color 280ms var(--ease-fluid), border-color 280ms var(--ease-fluid), box-shadow 320ms var(--ease-fluid), color 240ms var(--ease-fluid), transform 220ms var(--ease-fluid);
 }
 
 .home-hero-actions .home-primary-link {
@@ -206,7 +206,7 @@
   font-weight: 610;
   line-height: 1.25;
   padding: 9px 13px;
-  transition: background-color 180ms ease, color 160ms ease, transform 120ms ease;
+  transition: background-color 260ms var(--ease-fluid), color 240ms var(--ease-fluid), transform 180ms var(--ease-press);
 }
 
 .home-section-heading a:hover {
@@ -245,7 +245,8 @@
   overflow: hidden;
   padding: 12px;
   position: relative;
-  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 200ms ease, transform 150ms ease;
+  transition: background-color 340ms var(--ease-fluid), border-color 340ms var(--ease-fluid), box-shadow 380ms var(--ease-fluid), transform 300ms var(--ease-fluid);
+  will-change: transform;
 }
 
 .article-card-link::before {
@@ -272,7 +273,7 @@
 .article-card-image > span {
   height: 100%;
   object-fit: cover;
-  transition: transform 360ms ease;
+  transition: transform 560ms var(--ease-fluid);
   width: 100%;
 }
 
@@ -331,7 +332,7 @@
   line-height: 1.14;
   margin: 0;
   text-wrap: balance;
-  transition: color 160ms ease;
+  transition: color 280ms var(--ease-fluid);
 }
 
 .article-card-summary {
@@ -355,12 +356,13 @@
     linear-gradient(145deg, rgb(255 255 255 / 74%), rgb(255 255 255 / 42%));
   border-color: color-mix(in srgb, var(--accent), var(--glass-border) 76%);
   box-shadow: var(--glass-shadow);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 .article-card-link:active {
   box-shadow: inset 0 3px 10px rgb(0 0 0 / 18%);
-  transform: scale(0.985) translateY(1px);
+  transition-duration: 90ms;
+  transform: scale(0.982) translateY(1px);
 }
 
 .home-latest-empty {

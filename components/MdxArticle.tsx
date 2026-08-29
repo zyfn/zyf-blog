@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 import type { MdxContent } from "@/lib/blog";
 
@@ -29,6 +30,7 @@ export function MdxArticle({ Content }: { Content: MdxContent }) {
           Callout,
           Figure,
           a: ({ href, children }: { href?: string; children?: ReactNode }) => {
+            if (href?.startsWith("/")) return <Link href={href}>{children}</Link>;
             const external = href?.startsWith("http");
             return <a href={href} rel={external ? "noreferrer" : undefined} target={external ? "_blank" : undefined}>{children}</a>;
           },

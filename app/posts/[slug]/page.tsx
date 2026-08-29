@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MdxArticle } from "@/components/MdxArticle";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -46,7 +47,7 @@ export default async function PostPage({ params }: PostPageProps) {
       <SiteHeader active="articles" />
       <main className="reader-page">
         <header className="post-hero page-frame">
-          <a className="back-link" href="/posts">← Back to Blog</a>
+          <Link className="back-link" href="/posts">← Back to Blog</Link>
           <div className="post-heading">
             <div className="post-hero-meta">
               {post.tags.map((tag) => <span key={tag}>{tag}</span>)}

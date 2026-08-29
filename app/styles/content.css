@@ -62,7 +62,7 @@
   height: 46px;
   outline: 0;
   padding: 0 16px 0 42px;
-  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 180ms ease, transform 120ms ease;
+  transition: background-color 300ms var(--ease-fluid), border-color 300ms var(--ease-fluid), box-shadow 340ms var(--ease-fluid), transform 240ms var(--ease-fluid);
   width: 100%;
 }
 
@@ -117,7 +117,7 @@
   padding: 30px 28px 34px;
   position: relative;
   text-align: center;
-  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 200ms ease, transform 150ms ease;
+  transition: background-color 340ms var(--ease-fluid), border-color 340ms var(--ease-fluid), box-shadow 380ms var(--ease-fluid), transform 300ms var(--ease-fluid);
 }
 
 .about-person::before {
@@ -223,7 +223,7 @@
   justify-content: center;
   min-height: 42px;
   padding: 9px 15px;
-  transition: background-color 180ms ease, box-shadow 180ms ease, color 160ms ease, transform 120ms ease;
+  transition: background-color 280ms var(--ease-fluid), box-shadow 320ms var(--ease-fluid), color 240ms var(--ease-fluid), transform 200ms var(--ease-fluid);
 }
 
 .back-link:hover {
@@ -328,7 +328,7 @@
   font-size: 1rem;
   line-height: 1.4;
   padding: 8px 10px;
-  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 120ms ease;
+  transition: background-color 260ms var(--ease-fluid), border-color 260ms var(--ease-fluid), color 240ms var(--ease-fluid), transform 220ms var(--ease-fluid);
 }
 
 .article-toc nav a:hover {
@@ -348,7 +348,7 @@
   justify-content: space-between;
   margin-top: 26px;
   padding: 9px 10px;
-  transition: background-color 160ms ease, color 160ms ease, transform 120ms ease;
+  transition: background-color 260ms var(--ease-fluid), color 240ms var(--ease-fluid), transform 180ms var(--ease-press);
 }
 
 .article-toc-top:hover {

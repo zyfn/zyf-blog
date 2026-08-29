@@ -1,54 +1,30 @@
 @import "@fontsource/caveat/latin-600.css";
 
 :root {
-  color-scheme: light dark;
-  --background: #f5f5f3;
+  color-scheme: light;
+  --background: #eef1f5;
   --surface: #ffffff;
-  --surface-soft: #ecece8;
-  --text: #1d1d1f;
-  --text-soft: #414144;
-  --text-muted: #77777b;
-  --line: rgb(29 29 31 / 12%);
-  --line-strong: rgb(29 29 31 / 22%);
+  --surface-soft: #e3e7ed;
+  --text: #18191c;
+  --text-soft: #3f434a;
+  --text-muted: #6f747d;
+  --line: rgb(49 56 67 / 12%);
+  --line-strong: rgb(49 56 67 / 22%);
   --accent: #e65d43;
   --accent-hover: #c94b35;
   --accent-soft: #f8e3dd;
   --code-background: #1d1e20;
   --code-text: #f3f3f1;
-  --glass: rgb(255 255 255 / 52%);
-  --glass-strong: rgb(255 255 255 / 72%);
-  --glass-border: rgb(29 29 31 / 14%);
-  --glass-highlight: rgb(255 255 255 / 78%);
-  --glass-shadow: 0 18px 50px rgb(48 42 38 / 10%), inset 0 1px 0 var(--glass-highlight);
-  --press-shadow: 0 10px 26px rgb(48 42 38 / 9%), inset 0 1px 0 var(--glass-highlight);
+  --glass: rgb(255 255 255 / 48%);
+  --glass-strong: rgb(255 255 255 / 74%);
+  --glass-border: rgb(255 255 255 / 84%);
+  --glass-highlight: rgb(255 255 255 / 94%);
+  --glass-shadow: 0 28px 64px rgb(56 65 79 / 15%), 0 4px 14px rgb(56 65 79 / 8%), 0 0 0 1px rgb(56 65 79 / 8%), inset 0 1px 0 var(--glass-highlight), inset 0 -1px 0 rgb(56 65 79 / 7%);
+  --press-shadow: 0 14px 34px rgb(56 65 79 / 13%), 0 0 0 1px rgb(56 65 79 / 7%), inset 0 1px 0 var(--glass-highlight), inset 0 -1px 0 rgb(56 65 79 / 6%);
   --page: min(1120px, calc(100vw - 64px));
   --reader: min(1120px, calc(100vw - 64px));
   --sans: var(--font-geist-sans), "PingFang SC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
   --mono: var(--font-geist-mono), "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0d0f12;
-    --surface: #17191d;
-    --surface-soft: #22252a;
-    --text: #f2f2ef;
-    --text-soft: #d0d0cb;
-    --text-muted: #999a9f;
-    --line: rgb(255 255 255 / 12%);
-    --line-strong: rgb(255 255 255 / 22%);
-    --accent: #f07a60;
-    --accent-hover: #ff927b;
-    --accent-soft: #32201c;
-    --code-background: #151619;
-    --code-text: #f4f4f2;
-    --glass: rgb(31 34 40 / 58%);
-    --glass-strong: rgb(38 41 47 / 76%);
-    --glass-border: rgb(255 255 255 / 14%);
-    --glass-highlight: rgb(255 255 255 / 10%);
-    --glass-shadow: 0 22px 58px rgb(0 0 0 / 28%), inset 0 1px 0 var(--glass-highlight);
-    --press-shadow: 0 12px 30px rgb(0 0 0 / 24%), inset 0 1px 0 var(--glass-highlight);
-  }
 }
 
 * {
@@ -61,8 +37,9 @@ html {
 
 body {
   background:
-    radial-gradient(circle at 82% 12%, color-mix(in srgb, var(--accent), transparent 94%), transparent 27rem),
-    radial-gradient(circle at 16% 78%, color-mix(in srgb, var(--text), transparent 98%), transparent 32rem),
+    radial-gradient(circle at 82% 10%, rgb(230 93 67 / 13%), transparent 30rem),
+    radial-gradient(circle at 10% 72%, rgb(111 135 174 / 13%), transparent 34rem),
+    linear-gradient(135deg, #f8f9fb 0%, #eef1f5 48%, #e7ebf1 100%),
     var(--background);
   color: var(--text);
   font-family: var(--sans);
@@ -76,7 +53,7 @@ body {
 }
 
 body::before {
-  background-image: radial-gradient(rgb(255 255 255 / 8%) 0.55px, transparent 0.55px);
+  background-image: radial-gradient(rgb(29 29 31 / 8%) 0.55px, transparent 0.55px);
   background-size: 4px 4px;
   content: "";
   inset: 0;
@@ -154,6 +131,7 @@ img {
   display: flex;
   height: 74px;
   justify-content: space-between;
+  position: relative;
 }
 
 .brand,
@@ -202,13 +180,15 @@ img {
   display: flex;
   -webkit-backdrop-filter: blur(22px) saturate(165%);
   backdrop-filter: blur(22px) saturate(165%);
-  background: var(--glass);
+  background: linear-gradient(145deg, rgb(255 255 255 / 66%), rgb(255 255 255 / 38%));
   border: 1px solid var(--glass-border);
   border-radius: 999px;
   box-shadow: var(--press-shadow);
   gap: 4px;
+  left: 50%;
   padding: 4px;
-  position: relative;
+  position: absolute;
+  transform: translateX(-50%);
 }
 
 .site-global-nav a {
@@ -241,7 +221,7 @@ img {
 
 .site-global-nav a:hover,
 .site-global-nav a[aria-current="page"] {
-  background: var(--glass-strong);
+  background: linear-gradient(180deg, rgb(255 255 255 / 92%), rgb(255 255 255 / 66%));
   border-color: var(--glass-border);
   box-shadow: 0 5px 14px rgb(0 0 0 / 12%), inset 0 1px 0 var(--glass-highlight);
   color: var(--text);

@@ -40,16 +40,22 @@ export function BlogHome({ articles }: { articles: ArticleSummary[] }) {
             <div className="home-latest-list">
               {latestArticles.map((article) => (
                 <article className="home-latest-row" key={article.slug}>
-                  <time className="home-latest-date">{article.updated}</time>
                   <a className="home-latest-content" href={`/posts/${article.slug}`}>
                     <span className="home-latest-image" aria-hidden="true">
                       {article.coverImage ? <img alt="" loading="lazy" src={article.coverImage} /> : <span />}
                     </span>
                     <div className="home-latest-copy">
+                      <div className="home-latest-meta">
+                        <time>{article.updated}</time>
+                      </div>
                       <h3>{article.title}</h3>
                       <span className="home-latest-summary">{article.dek}</span>
+                      {article.tags.length ? (
+                        <div className="home-latest-tags" aria-label="Topics">
+                          {article.tags.map((tag) => <span key={tag}>{tag}</span>)}
+                        </div>
+                      ) : null}
                     </div>
-                    <span className="home-latest-arrow" aria-hidden="true">→</span>
                   </a>
                 </article>
               ))}

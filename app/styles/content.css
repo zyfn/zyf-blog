@@ -77,77 +77,6 @@
   opacity: 1;
 }
 
-.archive-content {
-  border-top: 1px solid var(--line);
-}
-
-.article-index-row + .article-index-row {
-  border-top: 1px solid var(--line);
-}
-
-.article-index-main {
-  align-items: start;
-  display: grid;
-  gap: clamp(34px, 5vw, 72px);
-  grid-template-columns: 142px minmax(0, 1fr) 28px;
-  padding: 27px 0 31px;
-}
-
-.article-index-date {
-  color: var(--text-muted);
-  font-size: 1.05rem;
-  font-variant-numeric: tabular-nums;
-  padding-top: 4px;
-}
-
-.article-index-copy h2 {
-  font-size: clamp(1.3rem, 1.75vw, 1.65rem);
-  font-weight: 610;
-  letter-spacing: -0.045em;
-  line-height: 1.17;
-  margin: 0;
-  text-wrap: balance;
-  transition: color 160ms ease;
-}
-
-.article-index-row:hover h2,
-.article-index-row:hover .article-index-arrow {
-  color: var(--accent);
-}
-
-.article-row-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  margin-top: 10px;
-}
-
-.article-row-tags span {
-  background: color-mix(in srgb, var(--topic-color), transparent 94%);
-  border: 1px solid color-mix(in srgb, var(--topic-color), transparent 82%);
-  border-radius: 8px;
-  color: color-mix(in srgb, var(--topic-color), var(--text) 34%);
-  font-size: 0.94rem;
-  line-height: 1.35;
-  padding: 3px 8px;
-}
-
-.article-index-copy > p {
-  color: var(--text-muted);
-  font-size: 1.05rem;
-  line-height: 1.65;
-  margin: 11px 0 0;
-  max-width: 74ch;
-}
-
-.article-index-arrow {
-  color: var(--text-muted);
-  font-size: 1.2rem;
-  justify-self: end;
-  padding-top: 4px;
-  transition: color 160ms ease;
-}
-
 .empty-state {
   padding: clamp(34px, 5vw, 56px) 0;
 }
@@ -576,38 +505,6 @@
 
   .post-search input {
     height: 46px;
-  }
-
-  .article-index-main {
-    gap: 14px 18px;
-    grid-template-columns: minmax(0, 1fr) 20px;
-    padding-block: 24px 27px;
-  }
-
-  .article-index-date {
-    grid-column: 1 / -1;
-    padding: 0;
-  }
-
-  .article-index-copy {
-    grid-column: 1;
-  }
-
-  .article-index-copy h2 {
-    font-size: 1.3rem;
-  }
-
-  .article-index-arrow {
-    grid-column: 2;
-    grid-row: 2;
-  }
-
-  .article-index-copy > p {
-    display: none;
-  }
-
-  .article-row-tags span {
-    font-size: 0.9rem;
   }
 
   .about-page {

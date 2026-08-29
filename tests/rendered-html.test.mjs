@@ -34,15 +34,17 @@ test("server-renders the editorial home without database content", async () => {
   assert.doesNotMatch(html, /site-logo-wordmark|site-global-search|>首页</);
   assert.match(html, /href="\/posts"/);
   assert.match(html, /href="\/about"/);
+  assert.equal((html.match(/class="article-card-row"/g) ?? []).length, 3);
   assert.doesNotMatch(html, /ZYF Notes|全部标签|标签/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
 });
 
 test("uses repository MDX as the only publishing source", async () => {
-  const [blogSource, explorerSource, homeSource, headerSource, packageJson, readme] = await Promise.all([
+  const [blogSource, explorerSource, homeSource, cardSource, headerSource, packageJson, readme] = await Promise.all([
     readFile(new URL("../lib/blog.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/ArticleExplorer.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/BlogHome.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/ArticleCard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/SiteHeader.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../README.md", import.meta.url), "utf8"),
@@ -56,7 +58,11 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.doesNotMatch(blogSource, /local-posts/);
   assert.match(explorerSource, /article\.title, article\.dek, \.\.\.article\.tags/);
   assert.doesNotMatch(explorerSource, /activeTag|tagCounts|Search Topics/);
-  assert.match(homeSource, /slice\(0, 5\)/);
+  assert.match(homeSource, /slice\(0, 3\)/);
+  assert.match(homeSource, /<ArticleCard/);
+  assert.match(explorerSource, /<ArticleCard/);
+  assert.match(cardSource, /article-card-tags/);
+  assert.doesNotMatch(cardSource, /author|avatar|readTime|readingTime/);
   assert.doesNotMatch(homeSource, /index-footer/);
   assert.doesNotMatch(headerSource, />首页</);
   assert.match(headerSource, /href="\/posts">Blog/);
@@ -76,6 +82,7 @@ test("renders a global-search archive without sidebar filters", async () => {
   const html = await response.text();
   assert.match(html, /Search the archive/);
   assert.match(html, /<h1>Archive<\/h1>/);
+  assert.equal((html.match(/class="article-card-row"/g) ?? []).length, 4);
   assert.doesNotMatch(html, /<span>Archive<\/span>|<h1>Blog<\/h1>/);
   assert.doesNotMatch(html, /搜索标题或摘要|<h1>文章<\/h1>/);
   assert.doesNotMatch(html, /topics-header|topic-grid|Blog categories|Articles \(|Shares \(|Notes \(/);

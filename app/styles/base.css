@@ -225,18 +225,6 @@ img {
   color: white;
 }
 
-.topic-tone-coral { --topic-color: #c76550; }
-.topic-tone-blue { --topic-color: #527fa5; }
-.topic-tone-sage { --topic-color: #57836d; }
-.topic-tone-violet { --topic-color: #796da0; }
-
-@media (prefers-color-scheme: dark) {
-  .topic-tone-coral { --topic-color: #e9907d; }
-  .topic-tone-blue { --topic-color: #81a8ca; }
-  .topic-tone-sage { --topic-color: #83b498; }
-  .topic-tone-violet { --topic-color: #aa9dce; }
-}
-
 @media (max-width: 720px) {
   :root {
     --page: calc(100vw - 30px);

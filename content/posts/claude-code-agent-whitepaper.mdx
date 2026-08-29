@@ -1,0 +1,779 @@
+---
+title: Claude Code 研发 Agent 白皮书
+date: 2026-08-10
+lastmod: 2026-08-10
+summary: 从上下文、权限、沙箱、Hook 与协作拓扑出发，理解 Claude Code 如何成为可治理的研发 Agent 运行时。
+tags:
+  - Claude Code
+  - Agent Runtime
+  - Agent Infra
+  - Developer Tools
+featured: true
+draft: false
+---
+
+> 自主性如何被工程化：从单次编码到可治理的研发执行系统
+
+> 信息基线：2026-08-10  
+> 文档版本：v2.0  
+> 文档类型：技术白皮书  
+> 证据范围：Anthropic 官方 Claude Code 与 Claude Platform 文档  
+> 目标读者：希望建立稳定工作方法、团队规范或研发 Agent 平台的工程师与技术负责人
+
+---
+
+## 导读：这不是一份功能菜单
+
+设想一个假设场景：你让 Claude Code 修复“订单取消后偶发重复退款”。它读完代码，改了事务逻辑，补了测试，最后告诉你任务已经完成。
+
+真正困难的判断此时才开始：它找到的是根因还是表象？新测试能否在旧实现上失败？事务边界是否仍适用于多实例部署？它没有触碰生产环境，是因为权限阻止了它，还是因为这一次恰好没有尝试？
+
+这些问题无法靠更长的提示词一次解决。它们共同指向 Claude Code 的本质：
+
+> Claude Code 不是一组“让模型更强”的功能，而是一套把上下文、工具、反馈和协作组织成执行循环的 Agent 运行时。它的可靠性取决于这个循环如何被设计，而不只取决于模型能生成什么。
+
+本文的主任务，是帮助读者建立一套可以迁移到真实仓库、团队和平台的判断模型。Slash 命令与易变化的产品清单放在附录；正文只回答四个承重问题：
+
+1. Claude Code 在什么环境中工作，谁拥有执行现场？
+2. 哪些知识应进入上下文，哪些规则必须由机制强制？
+3. Agent 的行动怎样被限制，完成怎样被外部证据证明？
+4. 任务扩大以后，何时应该增加 Session、Subagent、Team、Workflow 或 SDK？
+
+本文不做模型跑分、速度或价格比较，也不把实验能力写成稳定承诺。版本、账户、Provider、组织策略和 Feature flag 会改变实际可用集合；运行时应以 `/status`、`/help`、`/skills` 与当前官方文档为准。
+
+## 执行摘要
+
+Claude Code 官方将工作过程描述为不断交织的三个阶段：收集上下文、采取行动、验证结果。工具调用的返回值会进入下一轮判断，直到任务完成、失败，或需要人作出决定。[How Claude Code works](https://code.claude.com/docs/en/how-claude-code-works)
+
+工程上可以把这个循环展开为：
+
+```text
+意图与验收
+    ↓
+可执行上下文 ──→ 决策 ──→ 工具行动 ──→ 外部结果
+    ↑                                      │
+    └──────────── 证据与修正 ──────────────┘
+
+外围约束：权限 · 沙箱 · Hook · 组织策略 · 人工接管
+```
+
+由此得到五个结论：
+
+- `CLAUDE.md`、Rules、Memory 与 Skills 都在提供上下文，但它们的作用域、生命周期和加载成本不同；它们不是安全强制层。
+- Permission 决定 Claude 是否可以尝试某类工具调用，Sandbox 决定 Bash 及子进程在操作系统层真正能触达什么，Hook 则在固定生命周期点执行确定性检查。
+- 测试、构建、类型检查、浏览器结果和真实运行输出，比 Agent 自己的完成声明更可信；Checkpoint 也不能撤销远程系统副作用。
+- Subagent、Agent view、Agent team 与 Dynamic workflow 解决的是不同的协作拓扑。并发只有在任务边界、写入所有权和汇合方式明确时才有价值。
+- `claude -p`、CI 与 Agent SDK 是自动化层级，不是可靠性的捷径。越无人值守，越需要更窄的工具、环境、凭证和完成协议。
+
+一句话实施原则是：
+
+> 先让单个 Session 在明确边界内形成证据闭环，再把稳定做法沉淀为资产，最后才扩大并发和自主性。
+
+---
+
+## 1. 最小心智模型：Agent 是控制回路，不是长回答
+
+聊天式助手以“回答”为工作单位；研发 Agent 以“状态变化”为工作单位。Claude Code 通过搜索文件、读取实现、执行命令、观察失败和修改代码逐步修复 Bug，每一轮结果都会校正下一轮判断。
+
+```mermaid
+flowchart LR
+    A["目标与边界"] --> B["收集上下文"]
+    B --> C["形成当前假设"]
+    C --> D["调用工具并改变状态"]
+    D --> E["读取结果与证据"]
+    E --> F{"满足验收？"}
+    F -- "否" --> B
+    F -- "是" --> G["交付证据与剩余风险"]
+    P["Permission · Sandbox · Hook · Policy"] -. "约束" .-> D
+    H["人类判断"] -. "澄清 / 中断 / 接管" .-> C
+```
+
+这张图澄清了三个容易混淆的事实。
+
+第一，Prompt 只是初始输入。仓库内容、命令输出、测试结果、Skill、MCP 工具返回和人的中途纠正都会改变后续路径。
+
+第二，“能行动”和“行动正确”不是一回事。工具扩大了 Agent 的能力，也扩大了错误理解可以传播的范围。
+
+第三，“通过验证”和“需求正确”仍有距离。测试可能覆盖不全，也可能把错误行为固化成契约；业务判断不会因为进入 Agent loop 就自动消失。
+
+因此，使用 Claude Code 前先回答以下四问，再选择高级功能：
+
+| 设计问题 | 对应机制 | 缺失后的典型结果 |
+|---|---|---|
+| Agent 需要知道什么？ | `CLAUDE.md`、Rules、Memory、Skills、仓库与工具结果 | 在错误前提下流畅执行 |
+| Agent 可以改变什么？ | Permission、Sandbox、工作目录、凭证与网络 | 小误解扩散成大副作用 |
+| 什么能够证明完成？ | 测试、构建、运行观察、Review、结构化结果 | 用“看起来合理”替代证据 |
+| 工作怎样被拆开又合并？ | Session、Subagent、Team、Workflow、worktree | 并发重复、冲突和上下文污染 |
+
+后续所有能力都可以放回这四个问题中理解。
+
+## 2. 运行面：先决定执行现场属于谁
+
+Claude Code 可以出现在 CLI、IDE、Desktop、Cloud、远程控制、CI 与 Agent SDK 中。它们共享 Agent loop，却不共享同一个执行现场。
+
+| 运行面 | 代码和命令在哪里执行 | 最适合的工作 | 主要边界 |
+|---|---|---|---|
+| CLI | 当前机器与当前目录 | 本地调试、Shell 密集任务、深度会话控制 | 多任务可视监督较弱 |
+| VS Code / JetBrains | 本地工程与编辑器 | 选区修改、Inline diff、边读边改 | 大型后台工作仍需独立管理 |
+| Desktop | 本地项目或隔离 worktree | 多 Session、终端、预览、Diff 与任务监督 | 能力受操作系统、版本和账户影响 |
+| Claude Code on the web | Anthropic 管理的 Cloud VM | 异步任务、并行实现、完成后交付分支或 PR | 不天然拥有本机未提交文件和私人工具 |
+| Remote Control | 仍在原机器运行 | 用网页或移动端继续监督本机 Session | 原机器、进程和网络必须保持可用 |
+| Self-hosted environment | 组织自己的基础设施 | 在企业网络内承载 Cloud Session 的执行环境 | 控制面与模型推理仍在 Anthropic；不是完全离线部署 |
+| `claude -p` / CI | 调用者提供的运行环境 | 一次性检查、批处理、结构化自动化 | 没有人回答临时审批 |
+| Agent SDK | 你设计和托管的应用环境 | 垂直 Agent、内部平台、多租户服务 | 基础设施和隔离责任转移给平台方 |
+
+最容易出错的是把 Cloud Session 与 Remote Control 当成同一件事。前者把执行搬到新的云端环境；后者只改变控制入口，执行和凭证仍留在原机器，连接期间 Transcript 会存储在 Anthropic 服务端。Self-hosted environment 又是第三种语义：执行进入组织基础设施，Anthropic 控制面和模型推理仍在外部。[Platforms](https://code.claude.com/docs/en/platforms) · [Claude Code on the web](https://code.claude.com/docs/en/claude-code-on-the-web) · [Remote Control](https://code.claude.com/docs/en/remote-control) · [Self-hosted environments](https://code.claude.com/docs/en/self-hosted-environments)
+
+截至本文基线，Claude Code on the web 与 Remote Control 标为 Research preview；Self-hosted environments 面向 Team / Enterprise，处于 Public beta 且默认关闭。成熟度标签描述的是风险与变化速度，不应被改写成“不可用”或“已经稳定”的二元判断。
+
+选择运行面时，用三个问题比比较功能列表更可靠：
+
+1. 任务依赖本机未提交代码、私有服务或硬件吗？
+2. 任务需要人在运行中频繁判断，还是可以异步交付结果？
+3. 失败以后，环境、凭证和中间状态由谁清理？
+
+本地适合依赖密集、反馈频繁的工作；Cloud 适合边界清楚、环境可复现的异步任务；SDK 适合能力已经稳定到值得被产品化的流程。不要因为某个 Surface 更“高级”，就把任务搬到不拥有真实上下文的地方。
+
+## 3. 上下文契约：知识应按生命周期和作用域放置
+
+许多 Claude Code 配置最终都会变成模型看到的上下文，但“都能被模型看到”不等于“应该放在同一个文件里”。
+
+| 载体 | 最适合保存 | 生命周期与加载方式 | 不应承担 |
+|---|---|---|---|
+| `CLAUDE.md` | 每次工作都要知道的项目契约 | 按用户、项目、目录与本地层次加载 | 大量历史和临时任务 |
+| `.claude/rules/*.md` | 主题规则或路径相关约束 | 可按 `paths` 在相关文件出现时加载 | 全局安全强制 |
+| Auto memory | 本机跨 Session 的经验、陷阱和偏好 | 索引常驻，主题文件按需读取 | 团队唯一事实来源 |
+| Skill | 可复用流程、脚本、模板与参考 | 匹配任务或显式调用时加载 | 每个 Session 都必须遵守的规则 |
+| MCP / Connector | 外部系统的实时工具和数据 | 运行时调用 | 静态方法论和长期规范 |
+
+### 3.1 把 `CLAUDE.md` 写成工作协议
+
+一份有效的项目指令不需要解释整座系统。它应该记录模型难以从代码稳定推断、但会直接改变行动的事实：
+
+```markdown
+# Order service
+
+- Controller 不得直接调用 Repository。
+- 状态流转统一进入 `OrderStateMachine`。
+- 修改事务边界前，先说明并发与回滚影响。
+- 完成前运行 `./mvnw test -pl order-service`。
+- 未经明确要求，不连接生产、不推送分支。
+```
+
+这几行分别改变搜索入口、依赖方向、决策义务、验收动作和外部副作用。相比“保持高质量”“遵循最佳实践”，它们可以被观察和检查。
+
+官方建议让 `CLAUDE.md` 保持具体、简洁、有结构；项目指令属于上下文，并非客户端强制执行的安全策略。[Memory and CLAUDE.md](https://code.claude.com/docs/en/memory)
+
+已有 `AGENTS.md` 的仓库，可以在 `CLAUDE.md` 中用 `@AGENTS.md` 导入共享规则，再补 Claude 专属说明，避免复制两套项目规范。
+
+### 3.2 用作用域减少冲突，而不是不断追加
+
+Claude Code 会组合不同层次的指令。模糊或矛盾的规则不会因为出现更多次而更可靠。遇到单体仓库、Monorepo 或多团队目录时，应优先：
+
+- 把团队共享规则留在仓库根部；
+- 把语言、目录和模块特有规则下沉到路径作用域；
+- 把个人机器信息放进 `CLAUDE.local.md` 或用户层；
+- 把偶尔才需要的复杂方法移入 Skill；
+- 用 `/memory`、`/context` 和 `InstructionsLoaded` Hook 检查实际加载，而不是根据文件存在推断生效。
+
+Auto memory 适合保存调试结论和工作习惯，但它是机器本地资产，不会天然跨设备或进入 Cloud。需要团队评审、版本控制或强制执行的内容，应进入仓库文件、测试、Hook 或 Managed policy。
+
+## 4. 行动边界：把“应该做什么”和“实际上做得到什么”分开
+
+安全配置最常见的错误，是把所有控制都理解成“是否弹确认框”。Claude Code 至少有四层不同边界：
+
+```text
+行为指导：CLAUDE.md / Rules / Skill
+        ↓
+工具决策：Allow / Ask / Deny / Permission mode
+        ↓
+系统能力：Sandbox 的文件与网络边界
+        ↓
+确定性闸门：Hook / Managed policy / 外部审批
+```
+
+行为指导告诉模型应该怎样工作；Permission 判断某次工具调用是否允许、询问或拒绝；Sandbox 在操作系统层限制 Bash 及其子进程；Hook 在固定事件发生时运行代码，可以补充上下文、校验或阻断动作。[Permissions](https://code.claude.com/docs/en/permissions) · [Sandboxing](https://code.claude.com/docs/en/sandboxing) · [Hooks](https://code.claude.com/docs/en/hooks)
+
+这里有一个重要的安全边界：内置 Sandbox 主要覆盖 Bash 及其子进程，并不会自动包住 Read / Edit 工具、MCP Server 或 Hook。若目标是隔离整个 Agent 进程及其所有扩展，需要容器、VM 或官方单独提供的隔离运行环境，不能从“已开启 Sandbox”推导出“所有 I/O 都被 OS 隔离”。
+
+### 4.1 Permission mode 是交互策略，不是风险等级标签
+
+| Mode | 核心语义 | 适合场景 |
+|---|---|---|
+| `default` | 按规则决定是否询问 | 陌生仓库和日常基线 |
+| `acceptEdits` | 自动接受编辑与常见文件操作 | 本地实现，且会认真复核 Diff |
+| `plan` | 只读调查与规划 | 架构、审计和高影响改动之前 |
+| `auto` | 由后台安全判断辅助批准 | 边界清楚的长任务；当前仍需按官方成熟度判断 |
+| `dontAsk` | 未预先允许且需要询问的动作直接拒绝 | CI 与无人交互环境 |
+| `bypassPermissions` | 基本跳过交互权限 | 只应出现在可丢弃、无敏感凭证的强隔离环境 |
+
+`acceptEdits` 不意味着任意 Shell、MCP 或部署都被允许；`dontAsk` 也不意味着自动放行。对“绝不能发生”的动作使用 deny、Sandbox 或 Managed policy，不要只把提醒写进 Prompt。
+
+截至 2026-08-10，`auto` 仍不是当前默认模式。官方已经预告它可能从 2026-08-14 起成为部分订阅计划新会话的默认值，但未来计划不能提前写成当前事实；团队配置也不应依赖未生效的默认变化。[Permission modes](https://code.claude.com/docs/en/permission-modes)
+
+### 4.2 权限设计应围绕可逆性
+
+一个可操作的起点是：
+
+- 文件搜索、Git 状态和可信测试命令可以低摩擦执行；
+- 工作区内编辑可以在可审查的任务中放行；
+- 外网、仓库外写入、远程推送和数据库修改需要更高门槛；
+- 密钥目录、生产变更和高风险删除直接禁止或交给外部审批。
+
+```json
+{
+  "permissions": {
+    "defaultMode": "default",
+    "allow": [
+      "Bash(git diff *)",
+      "Bash(npm test *)",
+      "Bash(npm run lint *)"
+    ],
+    "ask": ["Bash(git push *)"],
+    "deny": [
+      "Read(./.env)",
+      "Read(./secrets/**)"
+    ]
+  }
+}
+```
+
+这只是设计示例。复合 Shell、重定向、路径匹配和子进程行为必须按当前版本实测。尤其要注意：文件工具的 deny 不一定等价于 OS 级阻断；要限制 Bash 子进程，仍需要 Sandbox 或容器边界。
+
+项目 Hook、MCP、Plugin 和脚本本身也可能执行代码。首次进入未知仓库时，Workspace trust 不是礼貌步骤，而是供应链边界。
+
+## 5. 证据闭环：把完成从模型声明变成外部事实
+
+高质量任务说明是一份小型工作协议：
+
+```text
+目标：修复订单取消后重复退款。
+范围：只改 payment-service；公共事件协议保持兼容。
+先做：追踪取消事件、幂等键、事务和退款落库路径。
+约束：不访问生产；不通过进程内锁解决多实例并发。
+验收：新增测试必须在旧实现失败、修复后通过；运行指定单测和集成测试。
+交付：说明根因、证据、修改点、残余风险与未验证项。
+```
+
+这份协议没有预先指定“必须增加唯一索引”或“必须使用分布式锁”。它给出问题边界和证明责任，把实现选择留给调查结果。
+
+### 5.1 一次可靠执行应留下什么
+
+```text
+可观察现象
+  → 当前实现与调用链
+  → 可复现的失败或明确缺口
+  → 受到约束的最小修改
+  → 机器或真实环境验证
+  → Diff 与独立 Review
+  → 已证实 / 推断 / 未知
+```
+
+Plan mode 适合先收集事实和比较方案，但 Plan 不是验收；测试通过能证明某些条件成立，但不能证明需求本身正确；Review 能发现可疑变化，也不替代运行验证。
+
+Checkpoint / Rewind 可以恢复 Claude 编辑造成的部分文件和对话变化，却不能撤回数据库写入、部署、外部消息或其他进程的副作用。[Checkpointing](https://code.claude.com/docs/en/checkpointing)
+
+因此，交付报告应明确区分：
+
+- **实际运行过的证据**：命令、结果、环境和范围；
+- **静态推断**：从代码和配置得到但未运行验证的判断；
+- **仍未知**：缺少权限、数据、环境或业务决策而无法确认的部分。
+
+当某项检查必须每次发生时，把它放进 CI 或 Hook，而不是只写“完成前记得测试”。建议属于上下文，保证属于机制。
+
+## 6. 扩展体系：按它介入循环的位置选择
+
+Skill、Hook、MCP 和 Plugin 经常被放在同一张“高级能力”清单里，但它们介入 Agent loop 的位置不同。
+
+| 需求 | 应使用 | 它改变了什么 |
+|---|---|---|
+| 复用分析方法、步骤、脚本和模板 | Skill | Agent 如何思考和执行一类任务 |
+| 在固定生命周期点强制运行检查 | Hook | 某事件发生时必然执行什么 |
+| 连接外部 API、数据和实时系统 | MCP / Connector | Agent 可以调用哪些外部工具 |
+| 向团队版本化分发整套能力 | Plugin | Skill、Agent、Hook、MCP 等怎样安装和升级 |
+| 在隔离上下文完成专业子任务 | Subagent | 谁在什么上下文和权限中工作 |
+
+Skill 的 `allowed-tools` 表达的是该 Skill 运行期间的临时预批准，并不是“该 Skill 只能使用这些工具”的限制名单。Skill 中的动态 Shell 预处理还会在内容进入模型前执行。设计 Skill 时仍要依赖 Permission、Sandbox 与可信代码审查建立边界，而不能把 Frontmatter 当安全沙箱。
+
+### 6.1 一个数据库变更助手应怎样分层
+
+假设团队要建立“数据库变更审查”能力：
+
+- `CLAUDE.md` 只保存每次都适用的仓库事实，例如迁移目录和禁止直接修改生产；
+- Skill 规定审查顺序、锁风险清单、回滚模板和输出格式；
+- MCP 读取真实 Schema、慢查询或变更记录；
+- Hook 在执行迁移命令前校验环境和审批票；
+- Plugin 在流程稳定后负责版本化分发。
+
+把这些内容都塞进一个超长 Prompt，会失去作用域、确定性和权限边界。
+
+### 6.2 什么时候不要扩展
+
+- 只在一个项目、一个人身上出现过一次的流程，不急着做 Plugin；
+- 纯方法论不需要为它搭 MCP Server；
+- 需要模型判断的复杂业务流程，不应塞进同步 Hook；
+- 每次都要遵守的短规则，不应藏在偶尔触发的 Skill；
+- 实时数据和凭证不应硬编码进 Skill 或 `CLAUDE.md`。
+
+先在项目内验证能力，确认触发条件、输入、输出和失败模式稳定，再升级为分发资产。[Skills](https://code.claude.com/docs/en/skills) · [MCP](https://code.claude.com/docs/en/mcp) · [Plugins](https://code.claude.com/docs/en/plugins)
+
+## 7. 多 Agent：扩大的不是人数，而是协作拓扑
+
+单个 Session 遇到上下文压力时，最自然的反应是“多开几个 Agent”。但并发的成本不只来自 Token，还来自重复调查、矛盾结论、写入冲突和集成责任。
+
+选择机制前，先判断工作之间是什么关系：
+
+| 机制 | 协调者 | 上下文关系 | 最适合 | 升级条件 |
+|---|---|---|---|---|
+| 单 Session | 人与当前 Agent | 连续共享 | 高频来回、实现与验证强耦合 | 上下文被一次性噪声淹没 |
+| Subagent | 主 Session | 独立上下文，返回摘要 | 日志分析、代码调查、专业审查、自包含任务 | Worker 需要持续互相沟通 |
+| Agent view | 人 | 多条完整 Session 独立 | 人同时监督多个任务 | 需要 Agent 自己协调任务 |
+| Agent team | Lead + 共享任务 | 成员拥有独立 Session，可通信 | 竞争假设、跨角色协作、交叉质疑 | 任务数量大到需要脚本化调度 |
+| Dynamic workflow | 编排脚本 | 按脚本传递输入和结果 | 大规模扇出、循环、流水线、可重跑批处理 | 需要跨进程持久等待与外部恢复 |
+
+这几种机制当前也不处于同一成熟度：Agent view 是 Research preview；Agent teams 是默认关闭的 Experimental 能力；Dynamic workflows 虽可大规模扇出，却不是跨会话的持久工作流。把成熟度与拓扑放在一起看，才能避免把可演示的能力直接当成团队基础设施。
+
+### 7.1 Subagent 的核心价值是隔离噪声
+
+一个 Subagent 会在独立上下文中工作，再把结果返回主 Session。大量日志、文档、搜索结果和测试输出可以留在子上下文，不必永久占据主线。[Subagents](https://code.claude.com/docs/en/sub-agents)
+
+好的委派应包含：唯一目标、明确读写范围、已有事实、验收方式、结果格式以及必须停下来请求决策的条件。下面两句话表面接近，实际质量不同：
+
+```text
+弱委派：看看支付模块有没有问题。
+
+可执行委派：只追踪支付回调到订单状态流转的调用链；
+列出所有幂等保护点、对应文件、证据和缺口；不修改代码。
+```
+
+前者制造一份泛泛意见，后者产生可以被主 Session 使用的中间证据。
+
+### 7.2 Team 只有在成员关系本身有价值时才成立
+
+如果成员只需分别完成任务并向主 Agent 汇报，Subagent 已经足够。Agent team 的额外价值来自共享任务、成员通信和持续协调，因此更适合：
+
+- 多个竞争假设需要互相挑战；
+- 前端、后端和测试之间要反复协商接口；
+- Review 成员需要交叉验证或反驳结论。
+
+严格顺序的小任务、同一核心文件上的高冲突修改，或者仅仅想“多找几个 Agent 看看”，都不值得建立 Team。当前 Agent teams 的成熟度与默认开关应以官方 [Agent teams](https://code.claude.com/docs/en/agent-teams) 文档为准。
+
+### 7.3 Worktree 只隔离 Git 状态
+
+并行写代码时，worktree 可以隔离分支和文件状态，却不会隔离数据库、端口、云资源、缓存和测试账号。真正的并行环境还需要为这些外部资源设计命名空间。[Worktrees](https://code.claude.com/docs/en/worktrees)
+
+### 7.4 Workflow 适合规模，而不是替代思考
+
+Dynamic workflow 把循环、分支、流水线和中间结果写成可读脚本，适合数十到数百个相似工作项：批量迁移、逐文件 Review、多来源研究、检查-修复-复查循环。
+
+在运行前仍要审查：输入发现范围、并发上限、失败传播、停止条件、权限和结果汇合方式。当前官方边界包括最多 16 个并发 Agent、一次运行最多 1,000 个 Agent；运行中不能像普通 Session 那样接收随意的用户输入，也不能跨 Claude Code 会话恢复。编排脚本可以重复一个好方法，也可以更快地重复一个坏方法。[Dynamic workflows](https://code.claude.com/docs/en/workflows)
+
+## 8. 模型、计划与 Review：把高成本能力放在决策点
+
+模型与 Effort 应跟随任务阶段，而不是成为全局身份标签。复杂任务通常不是每一步都难：架构判断、根因竞争和安全边界可能需要更强推理；机械修改和确定性验证更看重速度与稳定执行。
+
+| 决策点 | 适合能力 | 说明 |
+|---|---|---|
+| 陌生或高影响任务开始前 | Plan mode | 先确认事实、范围、迁移与验收，不直接改代码 |
+| 少数关键分叉或重复失败 | Advisor | 咨询第二模型；可用性、Provider 与额外成本需单独确认 |
+| 实现过程中快速检查 | 本地 Diff / Review | 发现改动范围、明显缺陷与可清理问题 |
+| 重大 PR 的独立复核 | 托管 Review / Ultrareview | 适合增加独立视角；实验状态与账户条件需核对 |
+| 安全关键代码 | 安全专项流程 | 威胁模型、测试、扫描与人工判断缺一不可 |
+
+Review 解决“哪些变化值得怀疑”，测试解决“哪些可执行条件已经满足”，业务验收解决“这是不是我们真正想要的行为”。三者不能互相替代。
+
+Fast mode、Advisor、Ultrareview 等能力可能受模型、账户、Provider、计费或成熟度状态限制。白皮书不把它们作为团队基础流程的唯一依赖。[Model configuration](https://code.claude.com/docs/en/model-config) · [Code review](https://code.claude.com/docs/en/code-review) · [Feature availability](https://code.claude.com/docs/en/feature-availability)
+
+## 9. 自动化与 SDK：无人值守会放大所有模糊处
+
+“让 Agent 继续工作”至少有七种语义。区分它们的关键，是谁持有进程、时钟、事件和恢复状态：
+
+| 机制 | 谁持有执行 | 最适合 | 关键限制 |
+|---|---|---|---|
+| `/goal` | 当前 Session | 围绕可验证条件跨 Turn 持续推进 | 每轮由完成检查判断目标；不会改变既有权限 |
+| `/loop` | 当前 CLI 进程 | 轮询部署、周期检查和会话内维护 | 进程必须存活；循环任务会到期，不是永久调度器 |
+| Desktop scheduled task | 本机 Desktop | 本机项目的定时重复任务 | App 必须运行，机器必须保持唤醒 |
+| Routine | Claude Cloud | 无人值守的云端自治任务 | Research preview；没有交互式权限提示，应预先收紧能力 |
+| Channel | 正在运行的本机会话 | 让外部事件进入当前 Session | Research preview；不是持久队列或云调度器 |
+| Dynamic workflow | 当前 Workflow 运行 | 大规模扇出、循环和批处理 | 不跨 Claude Code 会话恢复 |
+| 外部 Durable Workflow | 外部工作流引擎 | 跨进程等待、审批、重试与多系统状态机 | 需要自行维护状态、幂等与 Agent 上下文 |
+
+[Goal](https://code.claude.com/docs/en/goal) · [Scheduled tasks](https://code.claude.com/docs/en/scheduled-tasks) · [Desktop scheduled tasks](https://code.claude.com/docs/en/desktop-scheduled-tasks) · [Routines](https://code.claude.com/docs/en/routines) · [Channels](https://code.claude.com/docs/en/channels)
+
+从交互工具进入脚本或产品，还有三条主要接入路线：
+
+| 路线 | 适合 | 你需要额外负责 |
+|---|---|---|
+| `claude -p` | Shell、CI、一次性批处理 | 固定输入、工作目录、工具、超时、预算和输出格式 |
+| GitHub Actions / GitLab CI | PR、Issue 和仓库事件 | 事件信任、Token 权限、分支保护和人工合并 |
+| Claude Agent SDK | 垂直 Agent、内部平台、服务化执行 | 工作目录、进程、会话存储、租户隔离、凭证和可观测性 |
+
+### 9.1 `claude -p` 是最短的机器化路径
+
+Headless 模式可以从 stdin 接收输入，并输出 text、JSON 或 stream-json；需要机器判断时，应使用结构化输出，而不是让脚本解析一段自由文本。[Headless mode](https://code.claude.com/docs/en/headless)
+
+无人交互环境不能临时回答权限问题。比 `bypassPermissions` 更稳妥的做法，是为任务准备明确 allowlist、`dontAsk` 策略、隔离工作目录和最小网络出口。
+
+### 9.2 Agent SDK 复用的是完整循环
+
+Agent SDK 不等于一次 Messages API 调用。它面向需要 Session、built-in tools、权限回调、Hook、Subagent、Skill、MCP、结构化结果、预算和观测的应用。Python 与 TypeScript SDK 会携带并固定兼容的 Claude Code CLI 版本，因此升级 SDK 也可能改变底层运行行为。[Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)
+
+但 SDK 不会自动提供生产基础设施。会执行代码的多租户 Agent 仍需要容器或更强隔离、资源上限、短期凭证、持久 Session、网络策略、审计和人工接管。
+
+### 9.3 什么时候需要外部 Durable Workflow
+
+如果工作只在一个 Session 内循环，Dynamic workflow、后台 Agent 或 SDK Session 已经能覆盖很多场景。只有当流程必须跨进程恢复、等待 webhook 或人工审批、在故障后继续，并协调多个非 Claude 系统时，才应由外部工作流引擎持有业务状态：
+
+```text
+外部事件
+  → 持久工作流创建隔离环境
+  → 调用 Agent SDK
+  → 保存会话和结构化结果
+  → 等待审批 / 定时器 / 外部事件
+  → 恢复流程与 Agent 上下文
+  → 再验证、交付和审计
+```
+
+不要为了“高级”把一个简单研发任务包进长期状态机；也不要让一个普通 Agent Session 假装承担业务级持久性。
+
+## 10. 四个高级场景：从任务形状选择组合
+
+### 场景一：跨层功能，但接口尚未稳定
+
+主 Session 先在 Plan mode 中确认接口、迁移与验收；Subagent 分别调查前端、后端和测试影响；只有边界稳定后才进入独立 worktree 实现。若各角色必须持续讨论，再升级为 Team。
+
+关键不是并行得早，而是让互相依赖的决定先收敛。
+
+### 场景二：线上疑难问题存在多个竞争假设
+
+使用只读权限和受限网络，让不同 Subagent 或 Team member 各自验证一个假设；每个结论必须带复现、日志、调用链或代码证据。主 Session 只整合“已证实、被排除、仍未知”。
+
+生产修复、回滚和对外消息保留人工批准。调查环境不应默认拥有改变生产的凭证。
+
+### 场景三：数百文件机械迁移
+
+先完成一个代表样本，稳定转换规则与验收，再把方法沉淀成 Skill；随后由 Dynamic workflow 发现文件、分片处理、批量验证并输出失败清单。
+
+目标架构尚未稳定，或每个模块都需要产品判断时，不适合大规模自动扇出。
+
+### 场景四：内部研发 Agent 平台
+
+先用 `claude -p` 证明一个窄任务可以结构化完成；需要连续 Session、权限回调、自定义工具和观测时再进入 Agent SDK；每次执行使用隔离环境和短期凭证，外部系统负责身份、配额、恢复和审计。
+
+只有任务契约、失败模型和安全边界已经稳定，重复调用才值得升级为平台能力。
+
+## 11. 企业治理：治理对象是整条执行链
+
+企业不能只管理模型选择。Claude Code 的真实风险面横跨：
+
+- 登录组织、账户、Provider、模型与执行 Surface；
+- Permission、Sandbox、Hook、MCP、Plugin 和 Skill 来源；
+- Cloud、Remote Control、后台 Session 与实验能力开关；
+- 凭证发放、轮换、网络出口和工作目录；
+- Session、工具、权限、成本、错误和外部副作用的审计；
+- 数据政策、ZDR、云端功能和第三方 Provider 之间的取舍。
+
+Managed policy 的价值是收窄用户可以选择的范围，而不只是提供默认值。OpenTelemetry 和 Analytics 可以告诉团队能力被怎样使用、哪里失败、成本如何变化，却不能单独证明生产力或代码质量。[Admin setup](https://code.claude.com/docs/en/admin-setup) · [Monitoring](https://code.claude.com/docs/en/monitoring-usage)
+
+### 11.1 自主性应由资产支撑
+
+团队采用可以分为四个阶段，但升级条件不是使用时长，而是是否形成了上一阶段的工程资产。
+
+| 阶段 | 先形成的资产 | 再增加的自主性 |
+|---|---|---|
+| 单 Session 闭环 | 任务契约、测试命令、短 `CLAUDE.md`、Diff 复核 | 工作区内自主实现 |
+| 流程资产化 | 路径 Rules、首个 Skill、关键 Hook、只读 MCP | 更少重复提示与审批 |
+| 隔离并行 | 明确委派、结果协议、worktree 与资源命名空间 | Subagent、Team、Workflow |
+| 平台治理 | 容器、短期凭证、结构化结果、审计与接管 | Headless、CI、SDK 和跨团队推广 |
+
+如果上一阶段没有产生可审查的资产，下一阶段只会把偶然成功放大成不可解释的自动化。
+
+## 12. 边界与最强异议
+
+一份可靠白皮书不能只描述能力，也要说明结论在什么地方失效。
+
+### “只要测试足够多，Agent 就可以完全自主”
+
+测试只证明被表达出来的条件。需求错误、覆盖盲区、数据分布变化和跨系统副作用仍需工程判断。更好的结论是：验证越可执行，Agent 越适合承担实现；需求与风险越含糊，人越应靠近决策点。
+
+### “把所有规范写进 `CLAUDE.md` 就能统一行为”
+
+`CLAUDE.md` 是上下文，不是硬策略。内容过长、冲突或过时都会降低效果。必须发生的检查要进入 Hook、CI 或 Policy，不能发生的动作要进入 deny、Sandbox 或基础设施边界。
+
+### “多 Agent 总比单 Agent 快”
+
+只有独立性足够高、结果能够合并时，并行才缩短关键路径。共享隐含上下文、修改同一核心文件或依赖频繁决策的任务，多 Agent 会增加协调成本和错误面。
+
+### “Checkpoint 可以兜底，所以可以大胆执行”
+
+Checkpoint 主要恢复文件与会话变化，不等于数据库事务、部署回滚或外部消息撤回。不可逆副作用仍需权限、隔离、幂等和人工审批。
+
+### “接入 SDK 后就是生产级 Agent”
+
+SDK 提供 Agent 能力，不提供完整生产系统。身份、租户、工作区、资源限制、凭证、网络、持久化、审计和人工接管仍由平台承担。
+
+## 结论：成熟不是把人移出循环
+
+Claude Code 的价值，不在于让工程师更快地产生代码，而在于把理解、行动和验证连接成可反复修正的执行过程。
+
+成熟使用并不要求人退出循环。人的位置从逐行规定实现，移到定义问题、划定边界、决定接收证据，以及在不可逆分叉处承担判断。
+
+当项目把隐含经验变成短而准确的上下文，把风险变成权限和隔离，把完成变成外部证据，把并行变成有所有权的协作拓扑，Claude Code 才从“偶尔惊艳的终端工具”变成研发系统的一部分。
+
+这也是全文最重要的采用顺序：
+
+> 先闭环，后复用；先隔离，后并行；先有证据，再扩大自主性。
+
+## 附录 A：Claude Code 全部官方 Slash 命令
+
+{/* CLAUDE_SLASH_COMMANDS_START */}
+
+> 基线：Anthropic 官方 [Commands complete reference](https://code.claude.com/docs/en/commands.md)，核对日期 2026-08-10。  
+> 统计口径：官方表共 106 行；剔除 3 个已移除命令并补入 20 个未单列的活跃别名后，当前共有 **99 个有效命令身份、24 个别名、123 种固定 Slash 拼写**。  
+> 实现类型：**85 个 Built-in + 13 个 Bundled Skill + 1 个 Bundled Workflow**。动态 Skill、Plugin、MCP Prompt 和保存的 Workflow 另行说明，不存在全球固定总数。
+
+### A.1 场景索引：先知道该查哪一组
+
+| 场景 | 首选命令 | 关键区别 |
+|---|---|---|
+| 初次进入仓库 | `/init`、`/memory`、`/permissions` | 再按需配置 `/mcp` 与 `/plugin` |
+| 大改前调查 | `/plan`、`/advisor` | `/advisor` 是实验性第二模型咨询，不替代计划 |
+| 上下文治理 | `/context`、`/compact`、`/clear` | Compact 保留摘要，Clear 开新上下文 |
+| 会话分支与恢复 | `/resume`、`/branch`、`/rewind` | Branch 切到新方向，Rewind 可能回退代码 |
+| 并行工作 | `/subtask`、`/fork`、`/background`、`/workflows` | 分别是回传主会话、后台复制、整个会话脱离、脚本化编排 |
+| 交付前检查 | `/diff`、`/code-review`、`/security-review`、`/verify` | Review、专项安全审查和真实运行验证职责不同 |
+| 模型与成本 | `/model`、`/effort`、`/usage` | `/fast` 与 `/advisor` 可能产生额外成本或受 Provider 限制 |
+| 远程与 Cloud | `/remote-control`、`/teleport`、`/schedule` | 本机远控、Cloud 拉回、Cloud Routine 是三种不同语义 |
+| 扩展管理 | `/skills`、`/plugin`、`/mcp` | 变更后按需 reload，并审查供应链风险 |
+
+### A.2 Built-in Commands：85 个
+
+| 命令 | 作用 | 关键参数、条件或副作用 |
+|---|---|---|
+| `/add-dir <path>` | 为当前会话增加可访问目录 | 主要授予文件访问；不会普遍加载该目录全部 `.claude/` 配置 |
+| `/advisor [model\|off]` | 启停第二模型顾问 | 实验性；Provider 受限；每次咨询额外耗用 Token |
+| `/agents` | 显示创建和管理 Subagent 的说明 | 新版不再打开旧交互管理器 |
+| `/autocompact [auto\|<tokens>]` | 设置自动 Compact 触发窗口 | 可给 Token 阈值；保存到用户配置 |
+| `/autofix-pr [prompt]` | 启动 Cloud Agent 监控当前 PR 并处理 CI/评审反馈 | 需要 `gh` 与 Web 权限；可能推送代码 |
+| `/background [prompt]` | 将当前会话转为后台 Agent | 可附最后一条提示；别名 `/bg` |
+| `/branch [name]` | 从当前节点分支出新会话并切换 | 原会话保留；与后台复制 `/fork` 不同 |
+| `/btw [question]` | 发起不进入主会话历史的侧问 | 关键事实不要只留在 Side question 中 |
+| `/bug [report]` | 报告 Bug 或分享会话 | 会要求确认历史范围；别名 `/share` |
+| `/cd <path>` | 将当前会话迁移到新工作目录 | 会加载新目录指令、迁移 Session，并可能要求 Trust |
+| `/chrome` | 配置 Claude in Chrome | 需要 Chrome 扩展与受支持的 Anthropic 账户/连接 |
+| `/clear [name]` | 清空 Context 并开始新会话 | 旧会话仍可恢复；别名 `/reset`、`/new` |
+| `/color [color\|default]` | 设置当前会话提示条颜色 | 视觉标识，不改变模型行为 |
+| `/compact [instructions]` | 汇总历史并释放 Context | 可指定摘要重点；关键事实可能被概括 |
+| `/config [key=value ...]` | 打开设置或直接修改设置项 | 直接形式会持久写配置；别名 `/settings` |
+| `/context [all]` | 可视化 Context 占用并给出优化建议 | `all` 展开完整明细 |
+| `/copy [N]` | 复制最近或第 N 近的 Assistant 回复 | 有代码块时可选择；`w` 可写文件 |
+| `/design-login` | 授权 Claude Design，供 `/design-sync` 使用 | 涉及浏览器账户授权 |
+| `/desktop` | 在 Claude Code Desktop 中继续当前会话 | 平台、订阅受限；别名 `/app` |
+| `/diff` | 交互查看未提交 Diff 和逐 Turn Diff | 只读查看，不自动提交 |
+| `/effort [level\|auto]` | 调整模型推理强度 | 可选档位依模型；高档位增加成本 |
+| `/exit` | 退出 CLI | 附着后台会话时只 Detach；别名 `/quit` |
+| `/export [filename]` | 导出当前会话为纯文本 | 可能含代码和敏感上下文，分享前审查 |
+| `/fast [on\|off]` | 开关快速模式 | 可用性由模型目录、账户和 Provider 决定；费率可能更高 |
+| `/feedback [report]` | 发送 Claude Code 产品反馈 | 会要求确认历史范围 |
+| `/focus` | 切换专注视图，只显示关键消息 | 仅 Fullscreen renderer；不删除历史 |
+| `/fork [prompt]` | 复制当前对话为独立后台会话 | 主会话继续；并行写入通常还需 worktree |
+| `/goal [condition\|clear]` | 设置跨 Turn 持续工作的完成条件 | 条件应可验证，并限制成本与副作用 |
+| `/heapdump` | 生成 JS Heap snapshot 与诊断 | 不在菜单中；Snapshot 含完整会话和凭证，禁止分享 |
+| `/help` | 显示当前可用帮助与命令 | 实际列表受版本、Surface、Provider、策略和扩展影响 |
+| `/hooks` | 查看 Hook 配置 | 注意项目、用户和企业多层来源 |
+| `/ide` | 管理 IDE 集成并查看状态 | 功能取决于 IDE 和连接状态 |
+| `/import [codex\|gemini] [--dry-run] [--yes]` | 导入 Codex 或 Gemini CLI 配置 | 可导入指令、MCP、Command、Subagent、Skill；建议先 Dry run |
+| `/init` | 为项目生成初始 `CLAUDE.md` | 会写项目文件 |
+| `/insights` | 基于历史 Session 生成使用分析 | 会分析项目和交互历史，注意隐私 |
+| `/install-github-app` | 为仓库安装 Claude GitHub App | 会改变外部 GitHub 集成与 Secret 配置 |
+| `/install-slack-app` | 安装 Claude Slack App | 会打开 OAuth 并授权 Workspace |
+| `/keybindings` | 打开键盘快捷键配置 | 保存后改变输入行为 |
+| `/list-agents` | 列出可跨会话通信的 Agent / Session | 版本、平台和 Feature flag 受限；别名 `/peers` |
+| `/login` | 登录 Anthropic 账户 | 认证来源会影响可用 Plan、Provider 和命令 |
+| `/logout` | 登出 Anthropic 账户 | 清除会话凭据 |
+| `/mcp [reconnect <server>\|enable\|disable ...]` | 管理 MCP 连接与 OAuth | 不可信 Server 可能带来执行和数据风险 |
+| `/memory` | 编辑 `CLAUDE.md`、Auto memory 与条目 | 会影响后续 Session 的长期上下文 |
+| `/mobile` | 显示 Claude 手机 App 下载二维码 | 别名 `/ios`、`/android`；不等于 Remote Control |
+| `/model [model]` | 切换模型并可保存默认值 | 切模会重读历史并失去 Prompt cache |
+| `/passes` | 分享一周 Claude Code 免费体验 | 仅符合资格的账户可见 |
+| `/permissions` | 管理 Tool 的 Allow / Ask / Deny 与工作目录 | 放宽规则会扩大自动执行能力；别名 `/allowed-tools` |
+| `/plan [description]` | 进入 Plan mode 并可立即描述任务 | 先分析，后编辑 |
+| `/plugin [subcommand]` | 安装、启停和管理 Plugin | Plugin 可带 Skill、Agent、Hook、MCP；只信任明确来源 |
+| `/powerup` | 打开 Claude Code 功能短课 | 教学入口，不代表所有能力都可用 |
+| `/privacy-settings` | 查看与更新隐私设置 | 仅部分订阅计划可见 |
+| `/radio` | 打开 Claude FM Lo-fi 音乐 | 某些第三方 Provider 不可用 |
+| `/recap` | 生成当前 Session 的一行摘要 | 用于快速回忆现场 |
+| `/release-notes` | 交互查看 Changelog | 用于核对版本行为变化 |
+| `/reload-plugins [--force]` | 热重载启用的 Plugin | `--force` 可能破坏 Prompt cache；会加载新代码与工具 |
+| `/reload-skills` | 重新扫描 Skill 和旧 Command 目录 | 报告新增与移除数量 |
+| `/remote-control` | 允许从 Claude.ai 或移动端继续当前本地会话 | 运行仍在本机；别名 `/rc` |
+| `/remote-env` | 选择 Cloud Agent 默认运行环境 | 环境决定网络、变量和凭证范围 |
+| `/rename [name]` | 重命名当前 Session | 无参数时可从历史生成名称 |
+| `/resume [session]` | 恢复指定 Session 或打开选择器 | 运行中的后台 Session 要从 Agent view Attach；别名 `/continue` |
+| `/rewind` | 回退对话、代码或从某点摘要 | 可能修改工作区；别名 `/checkpoint`、`/undo` |
+| `/sandbox` | 切换 Sandbox mode | 仅支持的平台；改变 Shell 文件和网络隔离边界 |
+| `/schedule [description]` | 创建、更新、列出或运行 Cloud Routine | Research preview；订阅与 Web 权限受限；别名 `/routines` |
+| `/scroll-speed` | 调节鼠标滚轮速度 | 仅 Fullscreen renderer，且部分 IDE 终端不支持 |
+| `/security-review` | 对当前分支 Diff 做安全审查 | 需要 `origin`；审查结果不是安全证明 |
+| `/setup-bedrock` | 交互配置 Amazon Bedrock | 仅对应环境变量启用时可见 |
+| `/setup-vertex` | 交互配置 Google Cloud Agent Platform | 仅对应环境变量启用时可见 |
+| `/skills` | 列出 Skill 并管理菜单/模型可见性 | 列表是动态的，修改会影响可调用范围 |
+| `/status` | 显示版本、模型、账户、连接和 Session kind | 用于确认环境事实 |
+| `/statusline` | 配置底部状态栏 | 可能写入脚本；注意性能和敏感信息 |
+| `/stickers` | 订购 Claude Code 贴纸 | 外部流程，可能收集寄送信息 |
+| `/stop` | 停止当前后台会话 | 仅 Attach 到后台 Session 时可用；保留 Transcript 与 worktree |
+| `/subtask <task>` | 启动继承完整对话的后台 Subagent | 结果回到本会话；受 Agent view 可用性影响 |
+| `/tasks` | 查看和管理当前 Session 的后台任务 | 可停止任务；别名 `/bashes` |
+| `/team-onboarding` | 根据近 30 天历史生成团队上手指南 | 会分析使用历史，分享前检查私密信息 |
+| `/teleport` | 将 Claude Code on the web Session 拉回本地 | 需要订阅；会拉取分支；别名 `/tp` |
+| `/terminal-setup` | 配置 Shift+Enter 等终端键位 | 仅需要额外设置的终端显示 |
+| `/theme` | 选择内置、无障碍或 Plugin 主题 | 视觉设置，不改变模型行为 |
+| `/tui [default\|fullscreen]` | 切换 TUI Renderer 并保留 Session 重启 | Fullscreen 才支持 `/focus`、`/scroll-speed` |
+| `/upgrade` | 打开升级页面 | Enterprise 不显示；涉及订阅变更 |
+| `/usage` | 显示 Session 成本、额度和活动统计 | 别名 `/cost`、`/stats` |
+| `/usage-credits` | 配置 Usage credits 或向管理员申请 | 可能启用超额计费；旧名 `/extra-usage` |
+| `/voice [hold\|tap\|off]` | 开关语音听写并选择录音方式 | 需要 Claude.ai 账户和麦克风权限 |
+| `/web-setup` | 用本机 `gh` 凭据连接 Claude Code on the web | 会建立外部账户连接 |
+| `/workflows` | 查看、暂停、恢复和保存 Dynamic workflow | 保存后会动态新增 Slash 命令；注意 Agent 数和成本 |
+
+### A.3 Bundled Skills：13 个
+
+这些是 Anthropic 随 Claude Code 分发的 Prompt-based Skill，不是 CLI 固定逻辑。它们可被配置关闭，部分还可被同名企业、用户或项目 Skill 覆盖。
+
+| 命令 | 作用 | 关键参数、条件或副作用 |
+|---|---|---|
+| `/batch <instruction>` | 将大规模修改拆为 5～30 个单元并行实现 | Git 仓库；会创建后台 Agent、worktree 和 PR，成本与改动面较大 |
+| `/claude-api [migrate\|managed-agents-onboard\|prompt-audit]` | 提供 Claude API 迁移、Managed Agent 上手或 Prompt 审计 | 可能提出或应用代码和 Prompt Diff |
+| `/code-review [effort] [--fix] [--comment] [target]` | 审查当前 Diff、PR、Branch 或 Path | `--fix` 会改代码，`--comment` 会写 GitHub；别名 `/review` |
+| `/dataviz [request]` | 提供图表、仪表盘和可访问性建议 | 占位品牌色需在交付前替换 |
+| `/debug [description]` | 开启 Debug log 并诊断 Claude Code | 日志可能含敏感路径和上下文 |
+| `/design-sync [hint]` | 将 React 设计系统转换并上传到 Claude Design | 大仓库可能耗时很久；Provider 受限；存在上传边界 |
+| `/doctor` | 检查配置、Skill、MCP、Plugin、Hook 和 `CLAUDE.md`，确认后可修复 | Slash Skill 可能修改配置；终端 `claude doctor` 是只读诊断；别名 `/checkup` |
+| `/fewer-permission-prompts` | 从 Transcript 推导常见只读调用并写优先 Allowlist | 会放宽项目权限，必须审查规则范围 |
+| `/loop [interval] [prompt]` | 在当前 Session 存活时重复执行 Prompt | 长期运行持续消耗额度；别名 `/proactive` |
+| `/run` | 启动并操作项目应用，观察改动 | 会运行服务、GUI 或命令并产生副作用 |
+| `/run-skill-generator` | 学习项目启动方法并生成项目 Skill | 会写候选 Recipe；审查 Secret 与环境变量 |
+| `/simplify [target]` | 四个并行 Agent 检查复用、简化、效率和抽象，并应用清理 | 会改代码；不以 Correctness 为主，正确性应使用 Review |
+| `/verify` | 构建、运行并实际观察应用 | 仅显式调用；可能生成并覆盖项目 Verify Skill |
+
+### A.4 Bundled Workflow：1 个
+
+| 命令 | 作用 | 关键参数、条件或副作用 |
+|---|---|---|
+| `/deep-research <question>` | 多角度并行 Web 检索、交叉核验并生成带引用报告 | 依赖 Dynamic Workflows 与 WebSearch；多 Agent 成本明显；仅显式调用 |
+
+`/workflows` 是管理界面的 Built-in；`/deep-research` 才是官方 Bundled Workflow。保存后的自定义 Workflow 会动态生成 `/<name>`，不属于固定官方清单。
+
+### A.5 活跃 Alias：24 种拼写
+
+| Alias | 规范命令 | 备注 |
+|---|---|---|
+| `/app` | `/desktop` | 在 Desktop 继续 Session |
+| `/allowed-tools` | `/permissions` | 管理权限规则 |
+| `/android` | `/mobile` | 手机 App 下载入口 |
+| `/bashes` | `/tasks` | 当前 Session 后台任务 |
+| `/bg [prompt]` | `/background [prompt]` | 将会话转后台 |
+| `/checkup` | `/doctor` | 配置检查与修复 Skill |
+| `/checkpoint` | `/rewind` | Checkpoint 回退菜单 |
+| `/continue [session]` | `/resume [session]` | 恢复 Session |
+| `/cost` | `/usage` | Usage / Cost 页面 |
+| `/ios` | `/mobile` | 手机 App 下载入口 |
+| `/new [name]` | `/clear [name]` | 新 Context |
+| `/peers` | `/list-agents` | 跨 Session 通信对象 |
+| `/proactive [interval] [prompt]` | `/loop [interval] [prompt]` | 重复执行 Prompt |
+| `/quit` | `/exit` | 退出 CLI |
+| `/rc` | `/remote-control` | 开启本机 Remote Control |
+| `/reset [name]` | `/clear [name]` | 清空 Context |
+| `/review [effort] [flags] [target]` | `/code-review ...` | 新版为 Code Review Alias |
+| `/routines [description]` | `/schedule [description]` | Cloud Routines |
+| `/settings [key=value ...]` | `/config [key=value ...]` | 查看或直接修改 Settings |
+| `/share [report]` | `/bug [report]` | 分享会话 / 报告 Bug |
+| `/stats` | `/usage` | Usage 的 Stats Tab |
+| `/tp` | `/teleport` | Web Session 拉回本地 |
+| `/ultrareview [PR or branch]` | `/code-review ultra ...` | Research preview；账户、ZDR 与 Provider 受限 |
+| `/undo` | `/rewind` | Checkpoint 回退菜单 |
+
+### A.6 为什么你的菜单可能少一些命令
+
+| 限制类型 | 代表命令 | 原因 |
+|---|---|---|
+| Anthropic-only / Experimental | `/advisor` | 第三方 Provider 不支持 |
+| Model catalog / Usage credits | `/fast`、`/ultrareview` | 模型、账户、区域或计费受限 |
+| Subscription + Web | `/schedule`、`/autofix-pr`、`/teleport` | 依赖 Claude Code on the web |
+| Desktop OS | `/desktop` | Slash 入口受操作系统与订阅限制 |
+| Provider Setup | `/setup-bedrock`、`/setup-vertex` | 只有对应环境变量启用时显示 |
+| Platform / Feature flag | `/list-agents` | 版本、操作系统和 Cross-session messaging 限制 |
+| Fullscreen TUI | `/focus`、`/scroll-speed` | 只在 Fullscreen renderer 出现 |
+| Background state | `/stop` | 只在 Attach 到后台 Session 时可用 |
+| Account eligibility | `/passes`、`/privacy-settings`、`/upgrade` | 由计划和账户状态决定 |
+
+### A.7 动态 Slash 命令：没有固定总数
+
+| 来源 | 命名形式 | 发现与优先级 |
+|---|---|---|
+| 企业、用户、项目 Skill | `/skill-name` | 目录名决定；同名可覆盖 Bundled Skill |
+| 嵌套目录 Skill | 如 `/apps/web:deploy` | 首次访问对应目录后动态加载；冲突时使用限定名 |
+| 旧 `.claude/commands/*.md` | `deploy.md` → `/deploy` | 旧机制仍支持，但新能力优先使用 Skill |
+| Plugin Skill / Command | `/plugin-name:skill-name` | 取决于已安装和启用的 Plugin |
+| 保存的 Dynamic Workflow | Workflow 文件 → `/<name>` | Project 同名通常优先 |
+| MCP Prompt | `/mcp__<server>__<prompt>` | 由已连接 MCP Server 动态发现 |
+
+`user-invocable: false` 的 Skill 不会成为用户菜单项；`disable-model-invocation: true` 表示只能由用户显式 Slash 调用。Plugin、MCP 和项目配置都可能执行代码、发送数据或扩大权限，应纳入供应链审查。
+
+### A.8 已移除或更名：不要再算进当前全集
+
+| 旧命令 | 当前状态或替代 |
+|---|---|
+| `/pr-comments [PR]` | 已移除；直接让 Claude 查看 PR Comments |
+| `/ultraplan <prompt>` | 已移除；使用 `/plan` / Plan mode |
+| `/vim` | 已移除；在 `/config` 中设置 Editor mode |
+| `/extra-usage` | 旧名；当前命令为 `/usage-credits` |
+
+需要特别关注的行为迁移：`/agents` 新版只输出管理说明；`/review` 已成为 `/code-review` Alias；`/fork` 主要复制到独立后台会话，而 `/subtask` 承担结果回到主会话的 Forked Subagent 语义。
+
+{/* CLAUDE_SLASH_COMMANDS_END */}
+
+## 官方资料索引
+
+### 核心、界面与上下文
+
+- [Claude Code overview](https://code.claude.com/docs/en/overview)
+- [How Claude Code works](https://code.claude.com/docs/en/how-claude-code-works)
+- [Platforms](https://code.claude.com/docs/en/platforms)
+- [Desktop](https://code.claude.com/docs/en/desktop)
+- [Claude Code on the web](https://code.claude.com/docs/en/claude-code-on-the-web)
+- [Remote Control](https://code.claude.com/docs/en/remote-control)
+- [Self-hosted environments](https://code.claude.com/docs/en/self-hosted-environments)
+- [Sessions](https://code.claude.com/docs/en/sessions)
+- [Context window](https://code.claude.com/docs/en/context-window)
+- [Memory and CLAUDE.md](https://code.claude.com/docs/en/memory)
+
+### 配置、安全与扩展
+
+- [Settings](https://code.claude.com/docs/en/settings)
+- [Permission modes](https://code.claude.com/docs/en/permission-modes)
+- [Permissions](https://code.claude.com/docs/en/permissions)
+- [Sandboxing](https://code.claude.com/docs/en/sandboxing)
+- [Skills](https://code.claude.com/docs/en/skills)
+- [Hooks](https://code.claude.com/docs/en/hooks)
+- [MCP](https://code.claude.com/docs/en/mcp)
+- [Plugins](https://code.claude.com/docs/en/plugins)
+- [Feature availability](https://code.claude.com/docs/en/feature-availability)
+
+### 多 Agent、自动化与企业
+
+- [Subagents](https://code.claude.com/docs/en/sub-agents)
+- [Agent view](https://code.claude.com/docs/en/agent-view)
+- [Agent teams](https://code.claude.com/docs/en/agent-teams)
+- [Dynamic workflows](https://code.claude.com/docs/en/workflows)
+- [Worktrees](https://code.claude.com/docs/en/worktrees)
+- [Headless mode](https://code.claude.com/docs/en/headless)
+- [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)
+- [Goal](https://code.claude.com/docs/en/goal)
+- [Scheduled tasks](https://code.claude.com/docs/en/scheduled-tasks)
+- [Desktop scheduled tasks](https://code.claude.com/docs/en/desktop-scheduled-tasks)
+- [Routines](https://code.claude.com/docs/en/routines)
+- [Channels](https://code.claude.com/docs/en/channels)
+- [Enterprise admin](https://code.claude.com/docs/en/admin-setup)
+
+---

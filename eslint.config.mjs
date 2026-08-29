@@ -35,6 +35,11 @@ const eslintConfig = defineConfig([
         version: "detect",
       },
     },
+    rules: {
+      // vinext's client-side Link runtime is not compatible with this deployment target;
+      // internal navigation intentionally uses native anchors for reliable full-page loads.
+      "@next/next/no-html-link-for-pages": "off",
+    },
   },
 ]);
 

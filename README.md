@@ -68,8 +68,6 @@ components/
 └── ThemeToggle.tsx            明暗主题切换
 
 content/
-├── AUTHORING.md               MDX 发布规范
-├── AGENTS.md                  content 目录的 Agent 约束
 ├── templates/post.mdx         新文章模板
 └── posts/<slug>.mdx           可发布文章
 
@@ -124,7 +122,7 @@ draft: true
 - `draft: true` 的文章在开发环境可预览，在生产构建中不会公开。
 - `featured` 当前作为保留的编辑属性存入文章元数据，首页仍按发布日期展示最近 3 篇文章。
 - 正文不要再写 H1；页面会使用 frontmatter 的 `title` 渲染唯一 H1。
-- 图片、表格、代码块和共享 MDX 组件的完整规则见 [`content/AUTHORING.md`](./content/AUTHORING.md)。
+- 图片、表格、代码块和共享 MDX 组件的完整规则见项目级 [`AGENTS.md`](./AGENTS.md)。
 
 ## 本地开发
 

@@ -1,18 +1,9 @@
-"use client";
-
 export function ThemeToggle() {
-  function toggleTheme() {
-    const root = document.documentElement;
-    const nextTheme = root.dataset.theme === "dark" ? "light" : "dark";
-    root.dataset.theme = nextTheme;
-    localStorage.setItem("zyf-theme", nextTheme);
-  }
-
   return (
     <button
       aria-label="切换明暗主题"
+      aria-pressed="false"
       className="theme-toggle"
-      onClick={toggleTheme}
       title="切换明暗主题"
       type="button"
     >

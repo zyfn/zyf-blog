@@ -9,12 +9,39 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 
 const themeInitializer = `
   (() => {
+    const syncThemeControl = () => {
+      const dark = document.documentElement.dataset.theme === "dark";
+      document.querySelectorAll(".theme-toggle").forEach((button) => {
+        button.setAttribute("aria-label", dark ? "切换到浅色模式" : "切换到暗色模式");
+        button.setAttribute("aria-pressed", String(dark));
+        button.setAttribute("title", dark ? "切换到浅色模式" : "切换到暗色模式");
+      });
+    };
+
     try {
       const savedTheme = localStorage.getItem("zyf-theme");
       document.documentElement.dataset.theme = savedTheme === "dark" ? "dark" : "light";
     } catch {
       document.documentElement.dataset.theme = "light";
     }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", syncThemeControl, { once: true });
+    } else {
+      syncThemeControl();
+    }
+
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest(".theme-toggle")) return;
+
+      const nextTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+      document.documentElement.dataset.theme = nextTheme;
+      try {
+        localStorage.setItem("zyf-theme", nextTheme);
+      } catch {}
+      syncThemeControl();
+    });
   })();
 `;
 

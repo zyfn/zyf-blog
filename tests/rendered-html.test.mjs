@@ -69,6 +69,8 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.match(homeSource, /<ArticleCard/);
   assert.match(explorerSource, /<ArticleCard/);
   assert.match(cardSource, /article-card-tags/);
+  assert.match(cardSource, /article-card-arrow/);
+  assert.doesNotMatch(cardSource, /article-card-image|<img|coverImage/);
   assert.doesNotMatch(cardSource, /author|avatar|readTime|readingTime/);
   assert.doesNotMatch(homeSource, /index-footer/);
   assert.doesNotMatch([homeSource, cardSource, headerSource, postPageSource, mdxSource].join("\n"), /from ["']next\/link["']/);

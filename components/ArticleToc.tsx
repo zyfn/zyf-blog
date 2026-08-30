@@ -10,17 +10,15 @@ export function ArticleToc({ items }: { items: TocItem[] }) {
       className="article-toc"
       data-open="false"
     >
-      <div className="article-toc-header">
+      <button
+        aria-expanded="false"
+        aria-label="展开目录"
+        className="article-toc-header"
+        type="button"
+      >
         <span className="article-toc-title">Contents</span>
-        <span className="article-toc-controls">
-          <span className="article-toc-grip" aria-hidden="true" />
-          <button aria-expanded="false" aria-label="展开目录" className="article-toc-toggle" type="button">
-            <svg aria-hidden="true" viewBox="0 0 24 24">
-              <path d="m14 6-6 6 6 6" className="article-toc-chevron" />
-            </svg>
-          </button>
-        </span>
-      </div>
+        <span className="article-toc-grip" aria-hidden="true" />
+      </button>
       <div className="article-toc-body">
         <nav>
           {items.map((item, index) => (

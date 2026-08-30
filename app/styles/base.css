@@ -86,39 +86,6 @@ html {
   scroll-behavior: smooth;
 }
 
-@keyframes page-enter {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes page-exit {
-  to {
-    opacity: 0;
-  }
-}
-
-@view-transition {
-  navigation: auto;
-}
-
-::view-transition-old(root) {
-  animation: page-exit 150ms ease-out both;
-}
-
-::view-transition-new(root) {
-  animation: page-enter 360ms var(--ease-fluid) both;
-}
-
-::view-transition-group(*) {
-  animation-duration: 420ms;
-  animation-timing-function: var(--ease-fluid);
-}
-
 body {
   background:
     radial-gradient(circle at 82% 10%, var(--ambient-warm), transparent 30rem),
@@ -150,10 +117,6 @@ body::before {
 a {
   color: inherit;
   text-decoration: none;
-}
-
-main {
-  animation: page-enter 420ms var(--ease-fluid) both;
 }
 
 button,
@@ -424,10 +387,6 @@ img {
     transition-duration: 0.01ms !important;
   }
 
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation-duration: 0.01ms !important;
-  }
 }
 
 @media (prefers-reduced-transparency: reduce) {

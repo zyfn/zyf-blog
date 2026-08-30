@@ -53,7 +53,7 @@ export default async function PostPage({ params }: PostPageProps) {
               <a className="back-link" href="/posts"><span aria-hidden="true">←</span> Back to Blog</a>
               <time dateTime={post.updated.replaceAll(".", "-")}>Updated {post.updated}</time>
             </div>
-            <h1 style={{ viewTransitionName: `post-${post.slug}` }}>{post.title}</h1>
+            <h1>{post.title}</h1>
             <p>{post.dek}</p>
             <div className="post-hero-meta">
               {post.tags.map((tag) => <span key={tag}>{tag}</span>)}

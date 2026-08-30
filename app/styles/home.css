@@ -319,8 +319,8 @@
 .article-card-tags > span {
   color: var(--topic);
   font-family: var(--mono);
-  font-size: 0.76rem;
-  font-weight: 540;
+  font-size: 0.92rem;
+  font-weight: 560;
   letter-spacing: 0.012em;
   line-height: 1.4;
   transition: color 220ms var(--ease-fluid);
@@ -490,7 +490,7 @@
   }
 
   .article-card-tags > span {
-    font-size: 0.72rem;
+    font-size: 0.88rem;
   }
 
   .article-card-arrow {

@@ -47,8 +47,7 @@ const readingTraceInitializer = `
 
       const toc = document.querySelector('.article-toc');
       const handle = toc?.querySelector('.article-toc-header');
-      const toggle = toc?.querySelector('.article-toc-toggle');
-      if (toc && handle && toggle && !floatingReady) {
+      if (toc && handle && !floatingReady) {
         floatingReady = true;
         setTimeout(() => {
           let dragging = false;
@@ -78,7 +77,6 @@ const readingTraceInitializer = `
 
         handle.addEventListener('pointerdown', (event) => {
           if (event.button !== 0) return;
-          if (event.target.closest('.article-toc-toggle')) return;
           const rect = toc.getBoundingClientRect();
           dragging = true;
           moved = false;
@@ -90,7 +88,7 @@ const readingTraceInitializer = `
           toc.dataset.dragging = 'true';
         });
 
-        handle.addEventListener('pointermove', (event) => {
+        window.addEventListener('pointermove', (event) => {
           if (!dragging) return;
           const deltaX = event.clientX - startX;
           const deltaY = event.clientY - startY;
@@ -113,19 +111,19 @@ const readingTraceInitializer = `
           } catch {}
         };
 
-        handle.addEventListener('pointerup', finishDrag);
-        handle.addEventListener('pointercancel', finishDrag);
+        window.addEventListener('pointerup', finishDrag);
+        window.addEventListener('pointercancel', finishDrag);
         handle.addEventListener('click', (event) => {
-          if (!suppressClick) return;
-          event.preventDefault();
-          event.stopPropagation();
-          suppressClick = false;
-        }, true);
-        toggle.addEventListener('click', () => {
+          if (suppressClick) {
+            event.preventDefault();
+            event.stopPropagation();
+            suppressClick = false;
+            return;
+          }
           const open = toc.dataset.open !== 'true';
           toc.dataset.open = String(open);
-          toggle.setAttribute('aria-expanded', String(open));
-          toggle.setAttribute('aria-label', open ? '收起目录' : '展开目录');
+          handle.setAttribute('aria-expanded', String(open));
+          handle.setAttribute('aria-label', open ? '收起目录' : '展开目录');
           if (!open) return;
           setTimeout(() => {
             const rect = toc.getBoundingClientRect();

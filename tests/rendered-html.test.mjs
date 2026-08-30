@@ -71,7 +71,7 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.match(cardSource, /article-card-tags/);
   assert.match(cardSource, /article-card-arrow/);
   assert.match(cardSource, /article-card-trace/);
-  assert.match(cardSource, /viewTransitionName/);
+  assert.doesNotMatch(cardSource, /viewTransitionName/);
   assert.doesNotMatch(cardSource, /article-card-image|<img|coverImage/);
   assert.doesNotMatch(cardSource, /author|avatar|readTime|readingTime/);
   assert.doesNotMatch(homeSource, /index-footer/);
@@ -87,17 +87,20 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.match(layoutSource, /localStorage\.setItem\("zyf-theme"/);
   assert.match(layoutSource, /IntersectionObserver/);
   assert.match(layoutSource, /zyf-toc-position-v5/);
-  assert.match(layoutSource, /pointermove/);
+  assert.match(layoutSource, /window\.addEventListener\('pointermove'/);
   assert.match(baseStyles, /:root\[data-theme="dark"\]/);
+  assert.doesNotMatch(baseStyles, /@view-transition|::view-transition|animation: page-enter/);
   assert.match(baseStyles, /\.site-header \{[\s\S]*?position: relative;/);
   assert.doesNotMatch(baseStyles.match(/\.site-header \{[\s\S]*?\n\}/)?.[0] ?? "", /position: sticky|position: fixed/);
   assert.match(contentStyles, /\.article-toc nav \{[\s\S]*?overflow-y: auto;/);
   assert.match(contentStyles, /\.article-toc nav \{[\s\S]*?touch-action: pan-y;/);
   assert.match(contentStyles, /\.article-toc \{[\s\S]*?position: fixed;/);
-  assert.match(contentStyles, /\.article-toc\[data-open="false"\] \{[\s\S]*?width: 132px;/);
+  assert.match(contentStyles, /\.article-toc\[data-open="false"\] \{[\s\S]*?width: 46px;/);
   assert.doesNotMatch(tocSource, /["']use client["']|useState|onClick/);
   assert.match(tocSource, /<aside/);
   assert.match(tocSource, /aria-expanded="false"/);
+  assert.equal(tocSource.match(/<button/g)?.length, 1);
+  assert.doesNotMatch(tocSource, /article-toc-toggle|article-toc-controls|article-toc-chevron/);
   assert.match(tocSource, /article-toc-body/);
   assert.match(tocSource, /aria-current=\{index === 0/);
   assert.match(contentStyles, /\.article-layout \{[\s\S]*?display: block;/);
@@ -105,7 +108,7 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.doesNotMatch(postPageSource, /<span>ZYF<\/span>/);
   assert.doesNotMatch(postPageSource, /post-byline/);
   assert.match(postPageSource, /post-utility/);
-  assert.match(postPageSource, /viewTransitionName/);
+  assert.doesNotMatch(postPageSource, /viewTransitionName/);
   assert.ok(postPageSource.indexOf('className="post-hero-meta"') > postPageSource.indexOf('className="post-utility"'));
   assert.match(readme, /content\/posts\/<slug>\.mdx/);
   assert.doesNotMatch(packageJson, /drizzle|libsql|vercel\/blob|db:generate|tailwind/);
@@ -136,6 +139,7 @@ test("renders the release-ready About page with confirmed identity and domains",
   assert.match(html, /AI Open Platform/);
   assert.match(html, /MCP Gateway/);
   assert.match(html, /AgentTeam/);
+  assert.match(html, /https:\/\/github\.com\/zyfn/);
   assert.doesNotMatch(html, /目前关注|文章、分享与笔记/);
 });
 

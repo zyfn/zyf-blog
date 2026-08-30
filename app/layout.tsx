@@ -47,15 +47,17 @@ const readingTraceInitializer = `
 
       const toc = document.querySelector('.article-toc');
       const handle = toc?.querySelector('.article-toc-header');
-      if (toc && handle && !floatingReady) {
+      const toggle = toc?.querySelector('.article-toc-toggle');
+      if (toc && handle && toggle && !floatingReady) {
         floatingReady = true;
-        let dragging = false;
-        let moved = false;
-        let suppressClick = false;
-        let startX = 0;
-        let startY = 0;
-        let startLeft = 0;
-        let startTop = 0;
+        setTimeout(() => {
+          let dragging = false;
+          let moved = false;
+          let suppressClick = false;
+          let startX = 0;
+          let startY = 0;
+          let startLeft = 0;
+          let startTop = 0;
 
         const place = (left, top) => {
           const rect = toc.getBoundingClientRect();
@@ -67,17 +69,16 @@ const readingTraceInitializer = `
           toc.style.bottom = 'auto';
         };
 
-        setTimeout(() => {
           try {
             const saved = JSON.parse(localStorage.getItem('zyf-toc-position-v5') || 'null');
             if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
               place(saved.left, saved.top);
             }
           } catch {}
-        }, 600);
 
         handle.addEventListener('pointerdown', (event) => {
           if (event.button !== 0) return;
+          if (event.target.closest('.article-toc-toggle')) return;
           const rect = toc.getBoundingClientRect();
           dragging = true;
           moved = false;
@@ -120,17 +121,22 @@ const readingTraceInitializer = `
           event.stopPropagation();
           suppressClick = false;
         }, true);
-        toc.addEventListener('toggle', () => {
-          if (!toc.open) return;
+        toggle.addEventListener('click', () => {
+          const open = toc.dataset.open !== 'true';
+          toc.dataset.open = String(open);
+          toggle.setAttribute('aria-expanded', String(open));
+          toggle.setAttribute('aria-label', open ? '收起目录' : '展开目录');
+          if (!open) return;
           setTimeout(() => {
             const rect = toc.getBoundingClientRect();
             place(rect.left, rect.top);
           }, 340);
         });
-        window.addEventListener('resize', () => {
-          const rect = toc.getBoundingClientRect();
-          place(rect.left, rect.top);
-        });
+          window.addEventListener('resize', () => {
+            const rect = toc.getBoundingClientRect();
+            place(rect.left, rect.top);
+          });
+        }, 600);
       }
 
       const normalizedId = (value) => {

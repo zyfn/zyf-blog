@@ -92,11 +92,13 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.match(baseStyles, /\.site-header \{[\s\S]*?position: relative;/);
   assert.doesNotMatch(baseStyles.match(/\.site-header \{[\s\S]*?\n\}/)?.[0] ?? "", /position: sticky|position: fixed/);
   assert.match(contentStyles, /\.article-toc nav \{[\s\S]*?overflow-y: auto;/);
+  assert.match(contentStyles, /\.article-toc nav \{[\s\S]*?touch-action: pan-y;/);
   assert.match(contentStyles, /\.article-toc \{[\s\S]*?position: fixed;/);
+  assert.match(contentStyles, /\.article-toc\[data-open="false"\] \{[\s\S]*?width: 132px;/);
   assert.doesNotMatch(tocSource, /["']use client["']|useState|onClick/);
-  assert.match(tocSource, /<details/);
-  assert.doesNotMatch(tocSource, /<details[\s\S]*?\sopen(?:\s|>)/);
-  assert.match(tocSource, /<summary/);
+  assert.match(tocSource, /<aside/);
+  assert.match(tocSource, /aria-expanded="false"/);
+  assert.match(tocSource, /article-toc-body/);
   assert.match(tocSource, /aria-current=\{index === 0/);
   assert.match(contentStyles, /\.article-layout \{[\s\S]*?display: block;/);
   assert.doesNotMatch(contentStyles, /\.article-layout:has\(/);

@@ -2,7 +2,6 @@ export function ThemeToggle() {
   return (
     <button
       aria-label="切换明暗主题"
-      aria-pressed="false"
       className="theme-toggle"
       title="切换明暗主题"
       type="button"

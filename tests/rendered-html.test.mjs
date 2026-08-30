@@ -70,6 +70,8 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.match(explorerSource, /<ArticleCard/);
   assert.match(cardSource, /article-card-tags/);
   assert.match(cardSource, /article-card-arrow/);
+  assert.match(cardSource, /article-card-trace/);
+  assert.match(cardSource, /viewTransitionName/);
   assert.doesNotMatch(cardSource, /article-card-image|<img|coverImage/);
   assert.doesNotMatch(cardSource, /author|avatar|readTime|readingTime/);
   assert.doesNotMatch(homeSource, /index-footer/);
@@ -83,6 +85,7 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.doesNotMatch(themeSource, /["']use client["']|localStorage|onClick/);
   assert.match(layoutSource, /localStorage\.getItem\("zyf-theme"/);
   assert.match(layoutSource, /localStorage\.setItem\("zyf-theme"/);
+  assert.match(layoutSource, /IntersectionObserver/);
   assert.match(baseStyles, /:root\[data-theme="dark"\]/);
   assert.match(baseStyles, /\.site-header \{[\s\S]*?position: relative;/);
   assert.doesNotMatch(baseStyles.match(/\.site-header \{[\s\S]*?\n\}/)?.[0] ?? "", /position: sticky|position: fixed/);
@@ -90,8 +93,10 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.doesNotMatch(tocSource, /["']use client["']|useState|onClick/);
   assert.match(tocSource, /<details[\s\S]*?open/);
   assert.match(tocSource, /<summary/);
+  assert.match(tocSource, /aria-current=\{index === 0/);
   assert.match(contentStyles, /\.article-layout:has\(\.article-toc:not\(\[open\]\)\)/);
   assert.doesNotMatch(postPageSource, /<span>ZYF<\/span>/);
+  assert.match(postPageSource, /viewTransitionName/);
   assert.ok(postPageSource.indexOf('className="post-hero-meta"') > postPageSource.indexOf('className="post-byline"'));
   assert.match(readme, /content\/posts\/<slug>\.mdx/);
   assert.doesNotMatch(packageJson, /drizzle|libsql|vercel\/blob|db:generate|tailwind/);

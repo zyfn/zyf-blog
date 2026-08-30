@@ -232,8 +232,8 @@
 .article-card-link {
   align-items: start;
   display: grid;
-  gap: clamp(28px, 4vw, 58px);
-  grid-template-columns: minmax(124px, 154px) minmax(0, 1fr) 28px;
+  gap: clamp(14px, 2.2vw, 30px);
+  grid-template-columns: minmax(116px, 142px) 22px minmax(0, 1fr) 28px;
   isolation: isolate;
   min-width: 0;
   padding: clamp(22px, 2.2vw, 28px) 12px;
@@ -254,6 +254,46 @@
 
 .article-card-copy {
   min-width: 0;
+}
+
+.article-card-trace {
+  align-self: stretch;
+  min-height: 100%;
+  position: relative;
+}
+
+.article-card-trace::before {
+  background: var(--trace-line);
+  bottom: -29px;
+  content: "";
+  left: 50%;
+  position: absolute;
+  top: -29px;
+  transform: translateX(-50%);
+  width: 1px;
+}
+
+.article-card-trace::after {
+  background: var(--background);
+  border: 1px solid var(--trace-node);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--background), transparent 2%);
+  content: "";
+  height: 8px;
+  left: 50%;
+  position: absolute;
+  top: 0.44em;
+  transform: translate(-50%, -50%);
+  transition: background-color 220ms var(--ease-fluid), border-color 220ms var(--ease-fluid), box-shadow 260ms var(--ease-fluid), transform 220ms var(--ease-fluid);
+  width: 8px;
+}
+
+.article-card-row:first-child .article-card-trace::before {
+  top: 0.44em;
+}
+
+.article-card-row:last-child .article-card-trace::before {
+  bottom: calc(100% - 0.44em);
 }
 
 .article-card-meta {
@@ -330,6 +370,13 @@
 
 .article-card-link:hover .article-card-tags > span {
   color: var(--topic-hover);
+}
+
+.article-card-link:hover .article-card-trace::after {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent), transparent 84%);
+  transform: translate(-50%, -50%) scale(1.12);
 }
 
 .article-card-link:hover .article-card-arrow {
@@ -430,6 +477,10 @@
 
   .article-card-copy {
     grid-column: 1;
+  }
+
+  .article-card-trace {
+    display: none;
   }
 
   .article-card-tags {

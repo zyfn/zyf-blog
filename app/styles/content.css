@@ -298,18 +298,16 @@
 }
 
 .article-toc {
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
-  backdrop-filter: blur(24px) saturate(150%);
-  background: var(--glass);
-  border: 1px solid var(--glass-border);
-  border-radius: 22px;
-  box-shadow: var(--press-shadow);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   max-height: calc(100dvh - 128px);
   min-height: 0;
   overflow: hidden;
-  padding: 18px 14px 14px;
+  padding: 2px 4px 2px 0;
   position: sticky;
   top: 104px;
   transition: background-color 280ms var(--ease-fluid), border-color 280ms var(--ease-fluid), border-radius 360ms var(--ease-fluid), box-shadow 320ms var(--ease-fluid), padding 360ms var(--ease-fluid), width 360ms var(--ease-fluid);
@@ -320,7 +318,7 @@
   display: flex;
   flex: 0 0 auto;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   min-height: 34px;
   cursor: pointer;
   list-style: none;
@@ -334,7 +332,7 @@
 .article-toc-header > span {
   color: var(--text-muted);
   display: block;
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 620;
   white-space: nowrap;
 }
@@ -377,14 +375,25 @@
 
 .article-toc nav {
   display: grid;
-  gap: 2px;
+  gap: 1px;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding-right: 4px;
+  padding: 2px 4px 2px 0;
+  position: relative;
   scrollbar-color: color-mix(in srgb, var(--text-muted), transparent 58%) transparent;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
+}
+
+.article-toc nav::before {
+  background: var(--trace-line);
+  bottom: 10px;
+  content: "";
+  left: 9px;
+  position: absolute;
+  top: 10px;
+  width: 1px;
 }
 
 .article-toc nav::-webkit-scrollbar {
@@ -397,38 +406,63 @@
 }
 
 .article-toc nav a {
-  border: 1px solid transparent;
-  border-radius: 12px;
+  border: 0;
+  border-radius: 9px;
   color: var(--text-muted);
-  font-size: 1rem;
+  font-size: 0.88rem;
   line-height: 1.4;
-  padding: 8px 10px;
+  padding: 8px 8px 8px 28px;
+  position: relative;
   transition: background-color 260ms var(--ease-fluid), border-color 260ms var(--ease-fluid), color 240ms var(--ease-fluid), transform 220ms var(--ease-fluid);
 }
 
+.article-toc nav a::before {
+  background: var(--background);
+  border: 1px solid var(--trace-node);
+  border-radius: 50%;
+  content: "";
+  height: 7px;
+  left: 6px;
+  position: absolute;
+  top: 1.08em;
+  transition: background-color 220ms var(--ease-fluid), border-color 220ms var(--ease-fluid), box-shadow 260ms var(--ease-fluid), transform 220ms var(--ease-fluid);
+  width: 7px;
+}
+
 .article-toc nav a:hover {
-  background: var(--glass-strong);
-  border-color: var(--glass-border);
+  background: color-mix(in srgb, var(--glass-strong), transparent 58%);
   color: var(--text);
   transform: translateX(2px);
 }
 
+.article-toc nav a[aria-current="location"] {
+  color: var(--text);
+  font-weight: 620;
+}
+
+.article-toc nav a[aria-current="location"]::before {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent), transparent 84%);
+  transform: scale(1.12);
+}
+
 .article-toc-top {
-  background: color-mix(in srgb, var(--glass-strong), transparent 16%);
-  border: 1px solid var(--glass-border);
-  border-radius: 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
   color: var(--text-muted);
   display: flex;
   flex: 0 0 auto;
   font-size: 1rem;
   justify-content: space-between;
-  margin-top: 26px;
-  padding: 9px 10px;
+  margin-top: 18px;
+  padding: 8px 8px 8px 28px;
   transition: background-color 260ms var(--ease-fluid), color 240ms var(--ease-fluid), transform 180ms var(--ease-press);
 }
 
 .article-toc-top:hover {
-  background: var(--glass-strong);
+  background: color-mix(in srgb, var(--glass-strong), transparent 58%);
   color: var(--accent);
 }
 
@@ -437,7 +471,12 @@
 }
 
 .article-toc:not([open]) {
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(20px) saturate(150%);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
   border-radius: 50%;
+  box-shadow: var(--press-shadow);
   height: 48px;
   padding: 6px;
   width: 48px;
@@ -446,6 +485,7 @@
 .article-toc:not([open]) .article-toc-header {
   margin: 0;
   min-height: 34px;
+  padding: 0;
 }
 
 .article-toc:not([open]) .article-toc-header > span:first-child,

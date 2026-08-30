@@ -20,8 +20,8 @@ export function ArticleToc({ items }: { items: TocItem[] }) {
         </span>
       </summary>
       <nav>
-        {items.map((item) => (
-          <a href={`#${item.id}`} key={item.id}>
+        {items.map((item, index) => (
+          <a aria-current={index === 0 ? "location" : undefined} href={`#${item.id}`} key={item.id}>
             {item.label}
           </a>
         ))}

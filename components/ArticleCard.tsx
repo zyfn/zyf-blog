@@ -14,8 +14,9 @@ export function ArticleCard({ article, headingLevel = "h3" }: ArticleCardProps) 
         <time className="article-card-meta" dateTime={article.updated.replaceAll(".", "-")}>
           {article.updated}
         </time>
+        <span className="article-card-trace" aria-hidden="true" />
         <div className="article-card-copy">
-          <Heading>{article.title}</Heading>
+          <Heading style={{ viewTransitionName: `post-${article.slug}` }}>{article.title}</Heading>
           <span className="article-card-summary">{article.dek}</span>
           {article.tags.length ? (
             <div className="article-card-tags" aria-label="Topics">

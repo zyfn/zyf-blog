@@ -9,26 +9,11 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 
 const themeInitializer = `
   (() => {
-    const syncThemeControl = () => {
-      const dark = document.documentElement.dataset.theme === "dark";
-      document.querySelectorAll(".theme-toggle").forEach((button) => {
-        button.setAttribute("aria-label", dark ? "切换到浅色模式" : "切换到暗色模式");
-        button.setAttribute("aria-pressed", String(dark));
-        button.setAttribute("title", dark ? "切换到浅色模式" : "切换到暗色模式");
-      });
-    };
-
     try {
       const savedTheme = localStorage.getItem("zyf-theme");
       document.documentElement.dataset.theme = savedTheme === "dark" ? "dark" : "light";
     } catch {
       document.documentElement.dataset.theme = "light";
-    }
-
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", syncThemeControl, { once: true });
-    } else {
-      syncThemeControl();
     }
 
     document.addEventListener("click", (event) => {
@@ -40,8 +25,71 @@ const themeInitializer = `
       try {
         localStorage.setItem("zyf-theme", nextTheme);
       } catch {}
-      syncThemeControl();
     });
+  })();
+`;
+
+const readingTraceInitializer = `
+  (() => {
+    let attempts = 0;
+
+    const initializeReadingTrace = () => {
+      const links = Array.from(document.querySelectorAll('.article-toc nav a[href^="#"]'));
+      if (!links.length) {
+        if (/^\\/posts\\/[^/]+/.test(location.pathname) && attempts < 20) {
+          attempts += 1;
+          setTimeout(initializeReadingTrace, 100);
+        }
+        return;
+      }
+      if (!("IntersectionObserver" in window)) return;
+
+      const normalizedId = (value) => {
+        const id = value.replace(/^#/, '');
+        try { return decodeURIComponent(id); }
+        catch { return id; }
+      };
+
+      const sections = links
+        .map((link) => document.getElementById(normalizedId(link.hash)))
+        .filter(Boolean);
+
+      const setCurrent = (id) => {
+        const currentId = normalizedId(id);
+        links.forEach((link) => {
+          if (normalizedId(link.hash) === currentId) link.setAttribute('aria-current', 'location');
+          else link.removeAttribute('aria-current');
+        });
+      };
+
+      const updateFromPosition = () => {
+        const threshold = innerHeight * 0.28;
+        let current = sections[0];
+        for (const section of sections) {
+          if (section.getBoundingClientRect().top <= threshold) current = section;
+          else break;
+        }
+        if (current) setCurrent(current.id);
+      };
+
+      const observer = new IntersectionObserver((entries) => {
+        const current = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((left, right) => left.boundingClientRect.top - right.boundingClientRect.top)[0];
+        if (current) setCurrent(current.target.id);
+        else updateFromPosition();
+      }, { rootMargin: '-18% 0px -68% 0px', threshold: 0 });
+
+      sections.forEach((section) => observer.observe(section));
+      if (location.hash) setCurrent(location.hash.slice(1));
+      window.addEventListener('hashchange', () => setCurrent(location.hash.slice(1)));
+    };
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializeReadingTrace, { once: true });
+    } else {
+      initializeReadingTrace();
+    }
   })();
 `;
 
@@ -71,6 +119,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitializer }} />
+        <script dangerouslySetInnerHTML={{ __html: readingTraceInitializer }} />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>{children}</body>
     </html>

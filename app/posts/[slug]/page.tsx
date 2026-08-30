@@ -49,7 +49,7 @@ export default async function PostPage({ params }: PostPageProps) {
         <header className="post-hero page-frame">
           <a className="back-link" href="/posts">← Back to Blog</a>
           <div className="post-heading">
-            <h1>{post.title}</h1>
+            <h1 style={{ viewTransitionName: `post-${post.slug}` }}>{post.title}</h1>
             <p>{post.dek}</p>
             <div className="post-byline">
               <span>Updated {post.updated}</span>

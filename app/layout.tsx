@@ -32,6 +32,7 @@ const themeInitializer = `
 const readingTraceInitializer = `
   (() => {
     let attempts = 0;
+    let floatingReady = false;
 
     const initializeReadingTrace = () => {
       const links = Array.from(document.querySelectorAll('.article-toc nav a[href^="#"]'));
@@ -43,6 +44,94 @@ const readingTraceInitializer = `
         return;
       }
       if (!("IntersectionObserver" in window)) return;
+
+      const toc = document.querySelector('.article-toc');
+      const handle = toc?.querySelector('.article-toc-header');
+      if (toc && handle && !floatingReady) {
+        floatingReady = true;
+        let dragging = false;
+        let moved = false;
+        let suppressClick = false;
+        let startX = 0;
+        let startY = 0;
+        let startLeft = 0;
+        let startTop = 0;
+
+        const place = (left, top) => {
+          const rect = toc.getBoundingClientRect();
+          const maxLeft = Math.max(12, innerWidth - rect.width - 12);
+          const maxTop = Math.max(12, innerHeight - rect.height - 12);
+          toc.style.left = Math.min(Math.max(12, left), maxLeft) + 'px';
+          toc.style.top = Math.min(Math.max(12, top), maxTop) + 'px';
+          toc.style.right = 'auto';
+          toc.style.bottom = 'auto';
+        };
+
+        setTimeout(() => {
+          try {
+            const saved = JSON.parse(localStorage.getItem('zyf-toc-position-v5') || 'null');
+            if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+              place(saved.left, saved.top);
+            }
+          } catch {}
+        }, 600);
+
+        handle.addEventListener('pointerdown', (event) => {
+          if (event.button !== 0) return;
+          const rect = toc.getBoundingClientRect();
+          dragging = true;
+          moved = false;
+          startX = event.clientX;
+          startY = event.clientY;
+          startLeft = rect.left;
+          startTop = rect.top;
+          handle.setPointerCapture(event.pointerId);
+          toc.dataset.dragging = 'true';
+        });
+
+        handle.addEventListener('pointermove', (event) => {
+          if (!dragging) return;
+          const deltaX = event.clientX - startX;
+          const deltaY = event.clientY - startY;
+          if (!moved && Math.hypot(deltaX, deltaY) < 4) return;
+          moved = true;
+          place(startLeft + deltaX, startTop + deltaY);
+        });
+
+        const finishDrag = (event) => {
+          if (!dragging) return;
+          dragging = false;
+          toc.dataset.dragging = 'false';
+          if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+          if (!moved) return;
+          suppressClick = true;
+          setTimeout(() => { suppressClick = false; }, 250);
+          const rect = toc.getBoundingClientRect();
+          try {
+            localStorage.setItem('zyf-toc-position-v5', JSON.stringify({ left: rect.left, top: rect.top }));
+          } catch {}
+        };
+
+        handle.addEventListener('pointerup', finishDrag);
+        handle.addEventListener('pointercancel', finishDrag);
+        handle.addEventListener('click', (event) => {
+          if (!suppressClick) return;
+          event.preventDefault();
+          event.stopPropagation();
+          suppressClick = false;
+        }, true);
+        toc.addEventListener('toggle', () => {
+          if (!toc.open) return;
+          setTimeout(() => {
+            const rect = toc.getBoundingClientRect();
+            place(rect.left, rect.top);
+          }, 340);
+        });
+        window.addEventListener('resize', () => {
+          const rect = toc.getBoundingClientRect();
+          place(rect.left, rect.top);
+        });
+      }
 
       const normalizedId = (value) => {
         const id = value.replace(/^#/, '');

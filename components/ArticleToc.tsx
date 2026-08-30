@@ -8,15 +8,16 @@ export function ArticleToc({ items }: { items: TocItem[] }) {
     <details
       aria-label="文章目录"
       className="article-toc"
-      open
     >
       <summary className="article-toc-header" title="展开或收起阅读目录">
-        <span>阅读目录</span>
-        <span className="article-toc-toggle" aria-hidden="true">
-          <svg aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M9 6h10M9 12h10M9 18h10" />
-            <path d="m5 9-3 3 3 3" className="article-toc-chevron" />
-          </svg>
+        <span className="article-toc-title">Contents</span>
+        <span className="article-toc-controls" aria-hidden="true">
+          <span className="article-toc-grip" />
+          <span className="article-toc-toggle">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="m14 6-6 6 6 6" className="article-toc-chevron" />
+            </svg>
+          </span>
         </span>
       </summary>
       <nav>
@@ -27,7 +28,7 @@ export function ArticleToc({ items }: { items: TocItem[] }) {
         ))}
       </nav>
       <a className="article-toc-top" href="#top">
-        <span>返回顶部</span>
+        <span>Back to top</span>
         <span aria-hidden="true">↑</span>
       </a>
     </details>

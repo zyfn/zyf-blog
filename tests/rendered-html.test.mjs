@@ -86,18 +86,25 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.match(layoutSource, /localStorage\.getItem\("zyf-theme"/);
   assert.match(layoutSource, /localStorage\.setItem\("zyf-theme"/);
   assert.match(layoutSource, /IntersectionObserver/);
+  assert.match(layoutSource, /zyf-toc-position-v5/);
+  assert.match(layoutSource, /pointermove/);
   assert.match(baseStyles, /:root\[data-theme="dark"\]/);
   assert.match(baseStyles, /\.site-header \{[\s\S]*?position: relative;/);
   assert.doesNotMatch(baseStyles.match(/\.site-header \{[\s\S]*?\n\}/)?.[0] ?? "", /position: sticky|position: fixed/);
   assert.match(contentStyles, /\.article-toc nav \{[\s\S]*?overflow-y: auto;/);
+  assert.match(contentStyles, /\.article-toc \{[\s\S]*?position: fixed;/);
   assert.doesNotMatch(tocSource, /["']use client["']|useState|onClick/);
-  assert.match(tocSource, /<details[\s\S]*?open/);
+  assert.match(tocSource, /<details/);
+  assert.doesNotMatch(tocSource, /<details[\s\S]*?\sopen(?:\s|>)/);
   assert.match(tocSource, /<summary/);
   assert.match(tocSource, /aria-current=\{index === 0/);
-  assert.match(contentStyles, /\.article-layout:has\(\.article-toc:not\(\[open\]\)\)/);
+  assert.match(contentStyles, /\.article-layout \{[\s\S]*?display: block;/);
+  assert.doesNotMatch(contentStyles, /\.article-layout:has\(/);
   assert.doesNotMatch(postPageSource, /<span>ZYF<\/span>/);
+  assert.doesNotMatch(postPageSource, /post-byline/);
+  assert.match(postPageSource, /post-utility/);
   assert.match(postPageSource, /viewTransitionName/);
-  assert.ok(postPageSource.indexOf('className="post-hero-meta"') > postPageSource.indexOf('className="post-byline"'));
+  assert.ok(postPageSource.indexOf('className="post-hero-meta"') > postPageSource.indexOf('className="post-utility"'));
   assert.match(readme, /content\/posts\/<slug>\.mdx/);
   assert.doesNotMatch(packageJson, /drizzle|libsql|vercel\/blob|db:generate|tailwind/);
 

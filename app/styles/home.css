@@ -281,18 +281,18 @@
   height: 8px;
   left: 50%;
   position: absolute;
-  top: 0.44em;
+  top: 0.87em;
   transform: translate(-50%, -50%);
   transition: background-color 220ms var(--ease-fluid), border-color 220ms var(--ease-fluid), box-shadow 260ms var(--ease-fluid), transform 220ms var(--ease-fluid);
   width: 8px;
 }
 
 .article-card-row:first-child .article-card-trace::before {
-  top: 0.44em;
+  top: 0.87em;
 }
 
 .article-card-row:last-child .article-card-trace::before {
-  bottom: calc(100% - 0.44em);
+  bottom: calc(100% - 0.87em);
 }
 
 .article-card-meta {

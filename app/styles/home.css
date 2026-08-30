@@ -58,13 +58,13 @@
 }
 
 .hero-typewriter strong {
-  color: var(--text);
-  font-weight: 630;
+  color: var(--typewriter);
+  font-weight: 650;
 }
 
 .hero-typewriter i {
   animation: caret 900ms steps(1, end) infinite;
-  background: var(--accent);
+  background: var(--typewriter);
   display: inline-block;
   height: 1em;
   margin-left: 4px;
@@ -85,37 +85,53 @@
 
 .home-hero-actions a {
   align-items: center;
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
-  backdrop-filter: blur(18px) saturate(150%);
-  background: var(--glass);
-  border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: blur(26px) saturate(170%);
+  backdrop-filter: blur(26px) saturate(170%);
+  background: color-mix(in srgb, var(--glass), transparent 26%);
+  border: 1px solid color-mix(in srgb, var(--glass-highlight), var(--glass-border) 45%);
   border-radius: 999px;
-  box-shadow: var(--press-shadow);
+  box-shadow: 0 18px 42px color-mix(in srgb, var(--text), transparent 91%), 0 3px 10px color-mix(in srgb, var(--text), transparent 95%), inset 0 1px 0 var(--glass-highlight), inset 0 -1px 0 color-mix(in srgb, var(--text), transparent 94%);
   color: var(--text-muted);
   display: inline-flex;
-  font-size: 1.08rem;
+  font-size: 1.05rem;
   font-weight: 610;
-  gap: 9px;
-  min-height: 44px;
-  padding: 0 17px;
+  gap: 11px;
+  min-height: 50px;
+  padding: 0 21px;
   transition: background-color 280ms var(--ease-fluid), border-color 280ms var(--ease-fluid), box-shadow 320ms var(--ease-fluid), color 240ms var(--ease-fluid), transform 220ms var(--ease-fluid);
 }
 
 .home-hero-actions .home-primary-link {
-  background: color-mix(in srgb, var(--accent-soft), var(--glass) 58%);
-  border-color: color-mix(in srgb, var(--accent), transparent 58%);
+  background: color-mix(in srgb, var(--glass), transparent 20%);
+  border-color: color-mix(in srgb, var(--accent), var(--glass-border) 72%);
   color: var(--accent);
 }
 
+.home-hero-actions a span {
+  display: inline-block;
+  transition: transform 240ms var(--ease-fluid);
+}
+
 .home-hero-actions a:hover {
-  background: var(--glass-strong);
+  background: color-mix(in srgb, var(--glass-strong), transparent 14%);
+  border-color: color-mix(in srgb, var(--glass-highlight), var(--line-strong) 34%);
+  box-shadow: 0 22px 48px color-mix(in srgb, var(--text), transparent 88%), 0 4px 12px color-mix(in srgb, var(--text), transparent 94%), inset 0 1px 0 var(--glass-highlight), inset 0 -1px 0 color-mix(in srgb, var(--text), transparent 92%);
   color: var(--text);
   transform: translateY(-1px);
 }
 
+.home-hero-actions .home-primary-link:hover {
+  border-color: color-mix(in srgb, var(--accent), var(--glass-border) 58%);
+  color: var(--accent-hover);
+}
+
+.home-hero-actions a:hover span {
+  transform: translateX(3px);
+}
+
 .home-hero-actions a:active {
-  box-shadow: inset 0 2px 7px rgb(0 0 0 / 16%);
-  transform: scale(0.96) translateY(1px);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--text), transparent 92%), inset 0 3px 9px color-mix(in srgb, var(--text), transparent 84%), inset 0 1px 0 color-mix(in srgb, var(--glass-highlight), transparent 34%);
+  transform: scale(0.97) translateY(1px);
 }
 
 .home-profile {

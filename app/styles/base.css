@@ -15,6 +15,7 @@
   --accent-soft: #f8e3dd;
   --topic: #5879a6;
   --topic-hover: #3f6f9f;
+  --typewriter: #4f7697;
   --trace-line: rgb(88 121 166 / 30%);
   --trace-node: #7f98ba;
   --code-background: #1d1e20;
@@ -57,6 +58,7 @@
   --accent-soft: #33201c;
   --topic: #8fa9d1;
   --topic-hover: #b2c3df;
+  --typewriter: #8fb8d8;
   --trace-line: rgb(143 169 209 / 28%);
   --trace-node: #8fa9d1;
   --code-background: #090a0c;

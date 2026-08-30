@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="780" viewBox="0 0 1200 780" role="img" aria-labelledby="title desc">
+  <title id="title">Codex App Server turn lifecycle</title>
+  <desc id="desc">A sequence from initialize and thread start through turn events, an approval request, final items and turn completion.</desc>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", sans-serif; }
+  </style>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#71717a"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#10a37f"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#f97316"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="780" fill="#ffffff"/>
+  <text x="48" y="50" fill="#0d0d0d" font-size="25" font-weight="600">一次 Turn 的双向事件流</text>
+  <text x="48" y="78" fill="#6e6e80" font-size="14">响应确认请求，通知描述过程，反向请求等待客户端决定</text>
+
+  <rect x="90" y="108" width="220" height="66" rx="8" fill="#ffffff" stroke="#e5e5e5" stroke-width="1.5"/>
+  <rect x="490" y="108" width="220" height="66" rx="8" fill="#ffffff" stroke="#10a37f" stroke-width="1.5"/>
+  <rect x="890" y="108" width="220" height="66" rx="8" fill="#ffffff" stroke="#e5e5e5" stroke-width="1.5"/>
+  <text x="200" y="137" text-anchor="middle" fill="#0d0d0d" font-size="17" font-weight="600">Client</text>
+  <text x="200" y="158" text-anchor="middle" fill="#6e6e80" font-size="13">IDE · Dashboard · Service</text>
+  <text x="600" y="137" text-anchor="middle" fill="#0d0d0d" font-size="17" font-weight="600">App Server</text>
+  <text x="600" y="158" text-anchor="middle" fill="#6e6e80" font-size="13">RPC · Thread Manager</text>
+  <text x="1000" y="137" text-anchor="middle" fill="#0d0d0d" font-size="17" font-weight="600">Core Thread</text>
+  <text x="1000" y="158" text-anchor="middle" fill="#6e6e80" font-size="13">Harness · Model · Tools</text>
+
+  <line x1="200" y1="174" x2="200" y2="724" stroke="#e5e5e5" stroke-width="1.5" stroke-dasharray="5 5"/>
+  <line x1="600" y1="174" x2="600" y2="724" stroke="#e5e5e5" stroke-width="1.5" stroke-dasharray="5 5"/>
+  <line x1="1000" y1="174" x2="1000" y2="724" stroke="#e5e5e5" stroke-width="1.5" stroke-dasharray="5 5"/>
+
+  <path d="M200 214 H600" fill="none" stroke="#10a37f" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <rect x="342" y="192" width="116" height="22" rx="4" fill="#ffffff" opacity="0.96"/>
+  <text x="400" y="207" text-anchor="middle" fill="#10a37f" font-size="12">initialize</text>
+  <path d="M600 252 H200" fill="none" stroke="#71717a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="344" y="230" width="112" height="22" rx="4" fill="#ffffff" opacity="0.96"/>
+  <text x="400" y="245" text-anchor="middle" fill="#6e6e80" font-size="12">result</text>
+
+  <path d="M200 294 H600" fill="none" stroke="#10a37f" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <rect x="338" y="272" width="124" height="22" rx="4" fill="#ffffff" opacity="0.96"/>
+  <text x="400" y="287" text-anchor="middle" fill="#10a37f" font-size="12">thread/start</text>
+  <path d="M600 318 H1000" fill="none" stroke="#10a37f" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <rect x="732" y="296" width="136" height="22" rx="4" fill="#ffffff" opacity="0.96"/>
+  <text x="800" y="311" text-anchor="middle" fill="#10a37f" font-size="12">create session</text>
+  <path d="M1000 344 H600" fill="none" stroke="#71717a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="738" y="322" width="124" height="22" rx="4" fill="#ffffff" opacity="0.96"/>
+  <text x="800" y="337" text-anchor="middle" fill="#6e6e80" font-size="12">thread ready</text>
+  <path d="M600 370 H200" fill="none" stroke="#71717a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="342" y="348" width="116" height="22" rx="4" fill="#ffffff" opacity="0.96"/>
+  <text x="400" y="363" text-anchor="middle" fill="#6e6e80" font-size="12">thread result</text>
+
+  <path d="M200 414 H600" fill="none" stroke="#10a37f" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <rect x="340" y="392" width="120" height="22" rx="4" fill="#ffffff" opacity="0.96"/>
+  <text x="400" y="407" text-anchor="middle" fill="#10a37f" font-size="12">turn/start</text>
+  <path d="M600 438 H1000" fill="none" stroke="#10a37f" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <rect x="736" y="416" width="128" height="22" rx="4" fill="#ffffff" opacity="0.96"/>
+  <text x="800" y="431" text-anchor="middle" fill="#10a37f" font-size="12">run agent loop</text>
+  <path d="M600 472 H200" fill="none" stroke="#71717a" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+  <rect x="326" y="450" width="148" height="22" rx="4" fill="#ffffff" opacity="0.96"/>
+  <text x="400" y="465" text-anchor="middle" fill="#6e6e80" font-size="12">item/* notifications</text>
+
+  <rect x="158" y="498" width="484" height="114" rx="8" fill="none" stroke="#f97316" stroke-width="1.2" stroke-dasharray="5 4"/>
+  <text x="174" y="520" fill="#f97316" font-size="12" font-weight="600">需要用户决定时</text>
+  <path d="M600 548 H200" fill="none" stroke="#f97316" stroke-width="1.8" marker-end="url(#arrow-orange)"/>
+  <rect x="316" y="526" width="168" height="22" rx="4" fill="#ffffff" opacity="0.96"/>
+  <text x="400" y="541" text-anchor="middle" fill="#f97316" font-size="12">requestApproval</text>
+  <path d="M200 582 H600" fill="none" stroke="#f97316" stroke-width="1.8" marker-end="url(#arrow-orange)"/>
+  <rect x="340" y="560" width="120" height="22" rx="4" fill="#ffffff" opacity="0.96"/>
+  <text x="400" y="575" text-anchor="middle" fill="#f97316" font-size="12">decision</text>
+
+  <path d="M1000 644 H600" fill="none" stroke="#71717a" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
+  <rect x="730" y="622" width="140" height="22" rx="4" fill="#ffffff" opacity="0.96"/>
+  <text x="800" y="637" text-anchor="middle" fill="#6e6e80" font-size="12">final items</text>
+  <path d="M600 680 H200" fill="none" stroke="#10a37f" stroke-width="2" marker-end="url(#arrow-green)"/>
+  <rect x="326" y="658" width="148" height="22" rx="4" fill="#ffffff" opacity="0.96"/>
+  <text x="400" y="673" text-anchor="middle" fill="#10a37f" font-size="12">turn/completed</text>
+
+  <line x1="48" y1="746" x2="88" y2="746" stroke="#10a37f" stroke-width="2"/>
+  <text x="100" y="751" fill="#6e6e80" font-size="12">请求 / 主流程</text>
+  <line x1="226" y1="746" x2="266" y2="746" stroke="#71717a" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="278" y="751" fill="#6e6e80" font-size="12">通知 / 反馈</text>
+  <line x1="414" y1="746" x2="454" y2="746" stroke="#f97316" stroke-width="1.8"/>
+  <text x="466" y="751" fill="#6e6e80" font-size="12">反向请求 / 决策</text>
+</svg>

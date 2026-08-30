@@ -1,8 +1,8 @@
 ---
-title: Codex App Server：使用场景、能力与调用指南
+title: 把 Codex 接进自己的产品：App Server 使用指南
 date: 2026-07-31
-lastmod: 2026-07-31
-summary: 从 Thread、Turn、Item 和事件流出发，说明何时使用 Codex App Server，以及如何构建可恢复、可审批的生产客户端。
+lastmod: 2026-08-31
+summary: 从一次真实任务出发，理解 Codex App Server 的运行模型、完整命令面和生产客户端边界。
 tags:
   - Codex
   - App Server
@@ -13,541 +13,324 @@ featured: false
 draft: false
 ---
 
-## 先看结论
+如果你的程序只需要提交一次任务并等待结果，App Server 通常不是第一选择。用 `codex exec`，或者在代码里使用 Codex SDK，会更短、更直接。
 
-Codex App Server 是“让另一个程序持续控制 Codex”的后台接口。
+App Server 解决的是另一类问题：你正在做一个 IDE、桌面应用、内部研发平台或 Agent Team，需要长期持有多个 Codex 会话，持续接收执行事件，在正确的时刻展示 Diff、审批、用户输入和错误，并在进程或页面重启后恢复原来的工作。
 
-~~~text
-你的程序 / IDE / Dashboard / Agent Team
-                    ⇅ JSON-RPC
-              codex app-server
-                    ⇅
-       模型、文件、Shell、MCP、审批
-~~~
-
-它不是聊天界面，也不是普通的模型 API。它提供的是一条持久、双向、可流式传输的 Codex 控制通道：客户端可以创建和恢复对话、发送任务、接收实时事件、处理审批、追加指令和中断执行。
-
-如果只是执行一次任务并获取结果，优先使用：
-
-~~~bash
-codex exec "分析这个项目，不要修改文件"
-~~~
-
-本文只保留三件事：
-
-1. 什么场景该用 App Server，以及它和 SDK、codex exec 的关系；
-2. App Server 能做什么，不能替业务系统做什么；
-3. 从最小调用到生产集成的完整用法，包括常用高级参数。
-
-## 1. 使用场景
-
-### 1.1 它解决什么问题
-
-一次性 CLI 调用的生命周期通常是：
+这时，真正困难的不是“怎样发送一段 Prompt”，而是怎样拥有一条可靠的 Agent 运行链路：
 
 ~~~text
-提交 Prompt → Codex 执行 → 返回最终文本 → 进程结束
+业务对象
+  → Thread
+    → Turn
+      → Item
+        → 工具、文件、审批、用户输入
+          → 最终事件
+            → 业务验收
 ~~~
 
-App Server 的生命周期是：
+App Server 位于这条链路的中间。它把 Codex Harness 暴露为一个长生命周期进程和一组双向消息，但不会替你的产品拥有业务状态。
+
+<Callout title="本文基线">
+本文依据 OpenAI 官方 App Server 文档、Codex 开源实现，以及本机 `codex-cli 0.149.0` 在 2026-08-31 生成的 stable / experimental Schema。版本升级后，应重新生成 Schema，而不是把本文当成永远不变的接口定义。
+</Callout>
+
+## App Server 是什么
+
+Codex 不只有一个聊天窗口。CLI、IDE、Desktop 和远程运行环境都需要驱动同一套 Agent Loop：加载上下文、调用模型、执行工具、应用权限、记录事件，并在必要时向用户请求决定。
+
+App Server 把这套 Harness 变成了可以被其他程序控制的边界：
 
 ~~~text
-启动服务 → 创建 Thread → 发送多个 Turn
-                    ↓
-          持续接收消息、计划、命令、文件变更
-                    ↓
-          处理审批、用户输入、工具调用
-                    ↓
-          恢复、继续、分支或中断 Thread
+你的产品
+  ⇅ JSON-RPC lite
+Codex App Server
+  ⇅
+Codex Core Threads
+  ⇅
+模型 · Shell · 文件 · MCP · Skills · 审批
 ~~~
 
-因此，它的核心价值不是“再提供一种运行 Codex 的命令”，而是把 Codex 变成一个可以被其他应用长期管理的 Agent 后端。
+它同时是两件事：
 
-### 1.2 什么场景用 App Server
+- 一个长生命周期进程，负责承载和管理 Codex Thread；
+- 一套双向协议，让客户端发送请求、接收通知，并回答服务端反向请求。
 
-适合使用 App Server：
+<Figure
+  src="/images/posts/codex-app-server-guide/app-server-boundary.svg"
+  alt="App Server 系统边界：产品拥有 UI 和业务状态，App Server 管理协议与 Thread，Codex 执行模型、工具、文件和 MCP"
+  caption="App Server 连接产品和 Codex 执行面，但不会替产品拥有用户、业务 Task、验收与恢复策略。"
+/>
 
-- IDE 或桌面应用要嵌入 Codex，而不是打开独立终端；
-- 一个应用要长期管理多个 Codex Thread；
-- 需要实时显示 Agent 消息、计划、命令输出、文件修改和工具调用；
-- 用户可能在执行过程中追加指令、暂停、继续或中断；
-- Codex 需要向客户端请求命令审批、文件变更审批或结构化用户输入；
-- Agent Team 需要为每个成员维护独立 Thread、工作目录和上下文；
-- 应用重启后需要恢复原来的 Codex 对话，而不是重新创建空对话。
+官方协议保留 JSON-RPC 的请求、响应和通知形状，但 stdio 使用一行一条 JSON 的 JSONL framing。示例中不需要发送 `"jsonrpc": "2.0"`。
 
-不需要直接使用 App Server：
+### 什么时候应该使用
 
-- 只想让 Codex 分析一次日志或代码；
-- CI 中一次提交一个任务，完成后只读取最终结果；
-- 批量生成报告、发布说明或结构化 JSON；
-- 不需要实时事件、审批 UI、长连接和多轮交互。
+适合 App Server：
 
-这些场景优先使用 codex exec；需要在代码里使用类型化客户端时，再考虑 SDK。
+- IDE 或桌面应用需要嵌入完整 Codex 体验；
+- 一个服务需要长期管理多个 Thread；
+- UI 要实时展示 Agent 消息、计划、命令输出、文件修改和工具调用；
+- 用户要在执行中追加指令或中断 Turn；
+- 客户端必须处理命令审批、文件审批、权限申请或 MCP elicitation；
+- 页面、客户端或网络断开后仍要恢复同一 Thread；
+- 业务系统需要把自己的对象稳定绑定到 Codex 会话。
 
-### 1.3 App Server、SDK 与 codex exec
+不必直接使用 App Server：
 
-三者不是同一层的东西：
+- 一次性分析、批处理或 CI 任务；
+- 只关心最终文本或结构化结果；
+- 不需要多轮会话、实时事件或审批 UI；
+- 不希望自己维护 JSON-RPC 客户端和事件归并器。
 
-| 方案 | 定位 | 生命周期 | 适合场景 |
-|---|---|---|---|
-| codex exec | CLI 自动化入口 | 一次提交，一次结果 | CI、批处理、脚本、管道 |
-| Codex SDK | 对 App Server 的类型化客户端封装 | 由 SDK 管理本地 App Server 连接 | Python/TypeScript 程序调用 Codex |
-| App Server | Codex 的持久双向控制协议和服务进程 | 长连接、多 Thread、多 Turn、事件流 | IDE、桌面应用、Dashboard、Agent Team |
+| 方式 | 你实际拥有的东西 | 更适合 |
+| --- | --- | --- |
+| `codex exec` | 一次命令的执行生命周期 | Shell 自动化、CI、批处理 |
+| Codex SDK | 类型化的程序调用接口 | 服务端任务、代码内自动化 |
+| App Server | 完整 Harness、Thread、事件和反向请求 | IDE、Desktop、Dashboard、Agent Team |
 
-可以这样理解：
+### 传输怎么选择
+
+本机 `0.149.0` 支持：
+
+| 传输 | 启动方式 | 状态 | 使用建议 |
+| --- | --- | --- | --- |
+| stdio | `codex app-server` | 默认 | 本地嵌入首选；客户端拉起子进程 |
+| Unix Socket | `--listen unix://` 或 `unix://PATH` | 可用 | 同机多客户端共享控制通道 |
+| WebSocket | `--listen ws://IP:PORT` | 实验、官方标注 unsupported | 仅 localhost 或 SSH 转发；远程必须 TLS + Auth |
+| off | `--listen off` | 可用 | 不暴露本地客户端传输 |
+
+不要把未认证的非 loopback WebSocket 暴露到公网。需要远程连接时，使用 `wss://`，并通过 capability token 或 signed bearer token 完成握手认证。
+
+## 一次任务如何运行
+
+理解 App Server，先不要背接口。先看一条任务从客户端进入 Codex，再回到 UI 的完整路径。
+
+### 三个运行原语
+
+**Thread** 是持久会话。它保存多次 Turn 的历史，可以创建、恢复、分支、归档和读取。
+
+**Turn** 是一次用户输入引发的 Agent 工作。用户要求“修复失败测试”会创建一个 Turn；模型思考、工具调用、命令执行和最终回复都发生在这个 Turn 中。
+
+**Item** 是 Turn 内的一项输入或输出，例如用户消息、Agent 消息、命令执行、文件修改、计划、审批请求和 MCP 工具调用。
 
 ~~~text
-一次性自动化：       你的脚本 ──→ codex exec
-
-代码里的类型化调用：  你的程序 ──→ SDK ──→ App Server
-
-深度集成：             你的程序 ──→ App Server
+Thread
+├── Turn
+│   ├── userMessage
+│   ├── commandExecution
+│   ├── fileChange
+│   └── agentMessage
+└── Turn
+    └── ...
 ~~~
 
-SDK 和 App Server 不是互斥替代关系。SDK 通常负责把 JSON-RPC 协议包装成类型化接口，底层仍然是 App Server。
+边界非常重要：
 
-不要因为“都是在终端运行”就把它们当成同一件事。真正的区别是：
+- `item/completed` 证明一个 Item 到达最终状态；
+- `turn/completed` 证明一次 Turn 已结束；
+- 两者都不证明你的业务目标已经验收通过。
 
-- 谁是客户端；
-- 连接是否持续；
-- 协议是否支持服务端主动发消息；
-- 客户端是否需要自己管理 Thread、Turn、事件和审批。
+<Figure
+  src="/images/posts/codex-app-server-guide/turn-lifecycle.svg"
+  alt="App Server Turn 时序：客户端初始化、创建 Thread、启动 Turn、接收 Item 通知、回答审批并等待 turn completed"
+  caption="请求的响应只确认调用，持续通知描述执行过程；审批等反向请求必须由客户端回答，最终以 completed 事件收敛。"
+/>
 
-### 1.4 先理解三个对象
+### 连接握手
 
-~~~text
-一个 App Server 连接
-└── 多个 Thread（持久对话）
-    ├── Turn 1（一次用户输入及其执行）
-    │   ├── 用户消息
-    │   ├── Agent 消息
-    │   ├── 命令执行
-    │   └── 文件变更 / 工具调用
-    └── Turn 2
-~~~
+每条连接都必须先发送 `initialize`，再发送 `initialized` 通知。握手前的其他请求会被拒绝。
 
-#### Thread
-
-一个可持久化、可恢复的 Codex 对话。创建后返回 thread.id，客户端应保存它。
-
-#### Turn
-
-Thread 中的一次执行。调用 turn/start 创建 Turn；Turn 结束后，如果要继续对话，调用新的 turn/start。只有仍在运行的 Turn 才能使用 turn/steer 追加指令。
-
-#### Item
-
-Turn 内的一项输入或输出，例如 userMessage、agentMessage、plan、commandExecution、fileChange、mcpToolCall。
-
-### 1.5 App Server 不负责什么
-
-App Server 负责 Codex 原生执行生命周期，但不替业务应用定义业务模型：
-
-- 它不定义 Team、成员职责和业务 Task；
-- 它不定义 Task 依赖图；
-- turn/completed 只代表本次 Turn 结束，不代表业务目标已经完成；
-- 它不替客户端保存“哪个业务对象绑定哪个 Thread”的关系；
-- 它不替客户端判断 QA 是否通过或是否需要用户决策。
-
-业务系统仍应独立保存：
-
-~~~text
-业务 Task → memberId → threadId → 相关 Turn / 验收结果
-~~~
-
-## 2. 有哪些能力
-
-### 2.1 能力总览
-
-| 能力 | 主要接口 / 事件 | 作用 |
-|---|---|---|
-| 会话生命周期 | thread/start、thread/resume、thread/read、thread/list、thread/fork | 创建、恢复、查看、检索和分支对话 |
-| 执行生命周期 | turn/start、turn/steer、turn/interrupt | 开始、追加指令和中断执行 |
-| 实时事件 | item/*、turn/*、thread/status/changed | 流式展示消息、计划、命令、文件变更和状态 |
-| 交互请求 | 审批、用户输入、权限申请、MCP elicitation | 让客户端接管需要用户决定的环节 |
-| 本地执行 | Shell、命令、文件、Sandbox | 在指定工作目录中分析、修改和验证项目 |
-| 模型控制 | model/list、modelProvider/capabilities/read | 查询模型、推理 effort 和 Provider 能力 |
-| 上下文扩展 | Skill、MCP、Plugin、App、Dynamic Tool | 把外部能力接入 Codex |
-| 结构化结果 | turn/start.outputSchema | 约束最终 Assistant Message 的 JSON 形状 |
-| 持久化恢复 | thread/read、thread/resume、thread/items/list | 断线、重启后继续原 Thread |
-| 配置和鉴权 | config/read、账号接口、WebSocket Auth | 读取配置、登录和保护远程连接 |
-
-### 2.2 会话和执行控制
-
-#### Thread 能力
-
-- thread/start：创建新的 Thread；
-- thread/resume：恢复已有 Thread，后续可以继续 turn/start；
-- thread/read：读取已持久化 Thread，不恢复到内存；
-- thread/list：分页列出 Thread；
-- thread/fork：从已有 Thread 分支出新 Thread；
-- thread/name/set：设置用户可见名称；
-- thread/metadata/update：更新 pin 等元数据；
-- thread/archive 和 thread/unarchive：归档和恢复；
-- thread/delete：永久删除；
-- thread/compact/start：请求上下文压缩；
-- thread/unsubscribe：取消当前连接对 Thread 事件的订阅。
-
-#### Turn 能力
-
-- turn/start：开始一次新的执行；
-- turn/steer：给正在运行的 Turn 追加输入，不创建新 Turn；
-- turn/interrupt：请求中断当前 Turn；
-- review/start：启动 Codex Review；
-- thread/inject_items：向已加载 Thread 注入模型可见历史，不创建用户 Turn。
-
-### 2.3 实时事件和最终事实
-
-App Server 会同时发送流式增量和最终事件。UI 可以使用 Delta 做实时渲染，但状态落盘和恢复必须使用最终事件。
-
-| 需要判断的事实 | 应使用 |
-|---|---|
-| Thread 是否正在运行 | thread/status/changed |
-| Turn 是否结束 | turn/completed |
-| Item 的最终内容 | item/completed |
-| Agent 最终回复 | 最终的 agentMessage Item |
-| 计划最终状态 | 最后一次 turn/plan/updated 或最终 plan Item |
-| 当前 Diff | turn/diff/updated |
-| 服务端请求是否已处理 | serverRequest/resolved |
-
-常见事件：
-
-~~~text
-thread/started
-thread/status/changed
-turn/started
-item/started
-item/agentMessage/delta
-item/commandExecution/outputDelta
-item/fileChange/patchUpdated
-item/completed
-turn/plan/updated
-turn/diff/updated
-turn/completed
-~~~
-
-Turn 的常见最终状态：
-
-| 状态 | 含义 |
-|---|---|
-| inProgress | 正在执行 |
-| completed | 正常结束 |
-| interrupted | 被客户端中断 |
-| failed | 执行失败 |
-
-### 2.4 审批、输入和服务端反向请求
-
-App Server 不只是客户端向服务端发请求。Codex 也可能主动向客户端请求处理：
-
-~~~text
-Codex → 服务端请求 → 你的客户端展示 UI / 执行业务逻辑
-                   → 用同一个 request id 返回 result 或 error
-~~~
-
-常见请求：
-
-- item/commandExecution/requestApproval：命令审批；
-- item/fileChange/requestApproval：文件修改审批；
-- item/permissions/requestApproval：网络或文件权限申请；
-- item/tool/requestUserInput：向用户提问，实验能力；
-- mcpServer/elicitation/request：MCP Server 请求表单或 URL 确认；
-- item/tool/call：Dynamic Tool 调用，实验能力。
-
-如果客户端不响应这些请求，Turn 可能一直停在等待状态。生产客户端必须有 Server Request Router，不能只处理普通响应。
-
-### 2.5 执行权限和安全边界
-
-Thread 级 Sandbox Mode：
-
-~~~text
-read-only
-workspace-write
-danger-full-access
-~~~
-
-Turn 级 Sandbox Policy：
-
-~~~json
-{ "type": "readOnly", "networkAccess": false }
-~~~
+请求：
 
 ~~~json
 {
-  "type": "workspaceWrite",
-  "writableRoots": ["/workspace/project"],
-  "networkAccess": false
+  "method": "initialize",
+  "id": 0,
+  "params": {
+    "clientInfo": {
+      "name": "engineering-console",
+      "title": "Engineering Console",
+      "version": "0.1.0"
+    },
+    "capabilities": {
+      "experimentalApi": false
+    }
+  }
 }
 ~~~
 
-~~~json
-{ "type": "dangerFullAccess" }
-~~~
-
-审批策略常见值：
-
-- untrusted：更严格地拦截不可信操作；
-- on-request：需要时请求审批；
-- never：不请求用户审批；
-- granular 对象：按 Sandbox、Rules、MCP elicitation 等类别细分。
-
-建议默认值：
-
-| 任务 | Sandbox | Approval |
-|---|---|---|
-| 阅读和分析 | read-only | never |
-| 普通开发 | workspace-write | on-request |
-| 受控隔离环境 | 按环境配置 | 按环境配置 |
-
-不要静默默认使用 danger-full-access。远程 WebSocket 也不要未经认证暴露到公网。
-
-### 2.6 工作目录、指令和扩展能力
-
-#### 工作目录与 AGENTS.md
-
-thread/start.cwd 决定 Codex 从哪个工程上下文启动。Codex 会根据目录层级加载 AGENTS.md 或 AGENTS.override.md。响应里的 instructionSources 是实际加载文件的可验证结果。
-
-推荐分层：
-
-- 工程长期约束：工作目录生效范围内的 AGENTS.md；
-- 成员角色和本次客户端约束：developerInstructions；
-- 当前任务目标：turn/start.input。
-
-App Server 没有一个稳定参数可以把任意 BACKEND.md 指定成 AGENTS 文件。
-
-#### 输入类型
-
-turn/start.input 不只有文本，还可以传：
-
-- text：文本；
-- image：远程图片 URL；
-- localImage：本地图片路径；
-- audio / localAudio：音频；
-- skill：显式加载 Skill；
-- mention：引用 App 或 Plugin。
-
-#### 扩展能力
-
-- skills/list、skills/config/write：发现和配置 Skills；
-- mcpServerStatus/list、mcpServer/tool/call：查看和调用 MCP；
-- mcpServer/oauth/login：启动 MCP OAuth；
-- plugin/list、plugin/read、plugin/install：管理 Plugin，部分接口仍在开发；
-- app/list：查看可用 Apps；
-- Dynamic Tools：由客户端在 thread/start 时注册函数工具，属于实验能力。
-
-具体方法和字段以当前 Codex 生成的 Schema 为准，不要只复制网页示例。
-
-### 2.7 持久化和恢复
-
-App Server 通常会持久化：
-
-- 非 ephemeral Thread；
-- Thread 中的 Turn 和 Item 历史；
-- Codex 原生会话数据；
-- 部分 Thread 配置和 metadata；
-- Dynamic Tools 的部分 rollout metadata。
-
-客户端仍必须保存：
-
-- threadId；
-- 业务对象与 Thread 的绑定；
-- 业务幂等键；
-- 未解决的业务操作；
-- 已处理事件的位置或当前业务快照。
-
-App Server 的持久化不能替代业务数据库。
-
-## 3. 怎么用
-
-### 3.1 第一步：确认版本和 Schema
-
-先确认本机 CLI：
-
-~~~bash
-codex --version
-~~~
-
-生成当前版本的稳定 Schema：
-
-~~~bash
-codex app-server generate-ts --out ./schemas
-codex app-server generate-json-schema --out ./schemas
-~~~
-
-包含实验方法和字段：
-
-~~~bash
-codex app-server generate-ts --experimental --out ./schemas-experimental
-codex app-server generate-json-schema --experimental --out ./schemas-experimental
-~~~
-
-升级 Codex 后必须重新生成并检查至少这些定义：
-
-~~~text
-ClientRequest
-ClientNotification
-ServerRequest
-ServerNotification
-InitializeParams
-ThreadStartParams
-ThreadResumeParams
-TurnStartParams
-~~~
-
-本文的字段说明以本机 0.146.0-alpha.9.2 生成结果和官方 App Server 语义为依据。你的版本如果不同，应以你的 Schema 为最终编码依据。
-
-### 3.2 第二步：选择传输方式
-
-#### stdio：本地嵌入的默认选择
-
-~~~bash
-codex app-server
-~~~
-
-等价于：
-
-~~~bash
-codex app-server --listen stdio://
-~~~
-
-协议是逐行 JSON。客户端向 stdin 写入一行，服务端从 stdout 返回一行。服务端日志走 stderr，客户端不能把普通日志混入 stdout。
-
-适合 Node.js、Python、SDK、桌面应用直接拉起一个本地 App Server。
-
-#### WebSocket：实验能力
-
-~~~bash
-codex app-server --listen ws://127.0.0.1:4500
-~~~
-
-适合本机或 SSH 端口转发。官方仍将 WebSocket 标记为 experimental / unsupported。非本机连接必须使用 TLS 和认证：
-
-~~~bash
-codex app-server \
-  --listen ws://0.0.0.0:4500 \
-  --ws-auth capability-token \
-  --ws-token-file /absolute/path/to/token
-~~~
-
-不要把明文 Token 直接写进命令行。健康检查：
-
-~~~text
-GET /readyz
-GET /healthz
-~~~
-
-#### Unix Socket
-
-~~~bash
-codex app-server --listen unix://
-codex app-server --listen unix:///absolute/path/to/app-server.sock
-~~~
-
-#### Daemon 和 proxy
-
-~~~bash
-codex app-server daemon start
-codex app-server daemon restart
-codex app-server daemon stop
-codex app-server proxy
-~~~
-
-普通单进程集成不需要 Daemon。只有多个客户端需要复用本机 App Server 时才考虑它。
-
-### 3.3 第三步：理解 JSON-RPC 消息
-
-线上消息遵循 JSON-RPC 2.0 语义，但通常省略 jsonrpc: 2.0。
-
-客户端请求有 id：
+响应：
 
 ~~~json
 {
-  "method": "thread/start",
-  "id": 10,
+  "id": 0,
+  "result": {
+    "userAgent": "codex-cli/0.149.0",
+    "platformFamily": "unix",
+    "platformOs": "macos",
+    "codexHome": "/home/user/.codex"
+  }
+}
+~~~
+
+确认通知：
+
+~~~json
+{
+  "method": "initialized",
   "params": {}
 }
 ~~~
 
-成功响应回传同一个 id：
+### 创建 Thread
+
+`thread/start` 没有必填字段，但生产客户端通常至少明确 `cwd`，并根据产品配置选择模型、沙箱和审批策略。
+
+请求：
 
 ~~~json
 {
-  "id": 10,
+  "method": "thread/start",
+  "id": 1,
+  "params": {
+    "cwd": "/workspace/project",
+    "model": "gpt-5.6-terra",
+    "sandbox": "workspace-write",
+    "approvalPolicy": "on-request",
+    "developerInstructions": "只修改当前项目，完成后运行测试。"
+  }
+}
+~~~
+
+主要响应字段：
+
+~~~json
+{
+  "id": 1,
   "result": {
-    "thread": { "id": "thr_123" }
+    "thread": {
+      "id": "thr_123"
+    },
+    "model": "gpt-5.6-terra",
+    "modelProvider": "openai",
+    "cwd": "/workspace/project",
+    "approvalPolicy": "on-request",
+    "sandbox": "workspace-write",
+    "approvalsReviewer": "user",
+    "instructionSources": []
   }
 }
 ~~~
 
-失败响应：
+客户端必须保存 `thread.id`。不要因为页面刷新、WebSocket 断开或一段时间没有事件就创建替代 Thread。
+
+### 启动 Turn
+
+请求：
 
 ~~~json
 {
-  "id": 10,
-  "error": {
-    "code": 123,
-    "message": "Something went wrong"
-  }
-}
-~~~
-
-服务端通知没有 id：
-
-~~~json
-{
-  "method": "turn/started",
+  "method": "turn/start",
+  "id": 2,
   "params": {
     "threadId": "thr_123",
-    "turn": { "id": "turn_456" }
+    "input": [
+      {
+        "type": "text",
+        "text": "找出失败测试的根因，修复后重新运行相关测试。"
+      }
+    ],
+    "clientUserMessageId": "msg_bugfix_001"
   }
 }
 ~~~
 
-服务端反向请求同时有 method 和 id，客户端必须响应同一个 id。
+即时响应只表示 Turn 已建立：
 
-### 3.4 第四步：执行固定调用流程
-
-每条连接只初始化一次：
-
-~~~text
-连接
-  → initialize
-  ← initialize result
-  → initialized
-  → thread/start 或 thread/resume
-  ← thread result
-  → turn/start
-  ← item/*、turn/*、server request
-  ← turn/completed
+~~~json
+{
+  "id": 2,
+  "result": {
+    "turn": {
+      "id": "turn_456",
+      "status": "inProgress"
+    }
+  }
+}
 ~~~
 
-未完成初始化就调用其他方法会得到 Not initialized；重复初始化会得到 Already initialized。
+后续进度通过通知到达：
 
-### 3.5 最小可运行 Node.js 客户端
+~~~text
+turn/started
+item/started
+item/commandExecution/outputDelta
+item/completed
+item/started
+item/fileChange/patchUpdated
+item/completed
+item/agentMessage/delta
+item/completed
+turn/completed
+~~~
 
-保存为 app-server-demo.mjs：
+客户端应该把 Delta 当作临时渲染，把 `item/completed` 和 `turn/completed` 当作最终事实。
 
-~~~js
+### 回答审批
+
+App Server 是双向协议。需要审批时，服务端会发送带 `id` 的请求；客户端必须用相同 `id` 返回决定。
+
+服务端请求：
+
+~~~json
+{
+  "method": "item/commandExecution/requestApproval",
+  "id": 9001,
+  "params": {
+    "threadId": "thr_123",
+    "turnId": "turn_456",
+    "itemId": "item_789",
+    "reason": "命令需要访问网络",
+    "command": ["npm", "install"]
+  }
+}
+~~~
+
+客户端响应：
+
+~~~json
+{
+  "id": 9001,
+  "result": {
+    "decision": "accept"
+  }
+}
+~~~
+
+不要把审批弹窗做成全局单例。请求包含 `threadId` 和 `turnId`，UI 状态也必须按 Thread 和 Turn 归属。
+
+### 最小 Node.js 客户端
+
+下面的例子只实现一条最小路径：拉起 App Server、完成握手、创建 Thread、发送 Turn，并等待结束。
+
+~~~javascript
 import { spawn } from "node:child_process";
 import readline from "node:readline";
 
-const cwd = process.argv[2];
-if (!cwd) {
-  throw new Error("用法: node app-server-demo.mjs /absolute/project/path");
-}
-
-const proc = spawn("codex", ["app-server"], {
+const server = spawn("codex", ["app-server"], {
   stdio: ["pipe", "pipe", "inherit"],
 });
 
-const lines = readline.createInterface({ input: proc.stdout });
+const lines = readline.createInterface({ input: server.stdout });
 const pending = new Map();
-const completedTurns = new Map();
 let nextId = 1;
 
 function send(message) {
-  proc.stdin.write(JSON.stringify(message) + "\n");
+  server.stdin.write(JSON.stringify(message) + "\n");
 }
 
-function request(method, params = {}) {
+function request(method, params) {
   const id = nextId++;
   send({ method, id, params });
   return new Promise((resolve, reject) => {
@@ -555,213 +338,120 @@ function request(method, params = {}) {
   });
 }
 
-function notify(method, params = {}) {
-  send({ method, params });
-}
-
-function waitForTurn(turnId) {
-  return new Promise((resolve) => completedTurns.set(turnId, resolve));
-}
-
 lines.on("line", (line) => {
   const message = JSON.parse(line);
 
-  if ("id" in message && !("method" in message)) {
+  if (message.id !== undefined && pending.has(message.id)) {
     const waiter = pending.get(message.id);
-    if (!waiter) return;
     pending.delete(message.id);
-    if (message.error) waiter.reject(new Error(message.error.message));
+    if (message.error) waiter.reject(message.error);
     else waiter.resolve(message.result);
     return;
   }
 
-  if (message.method === "item/completed") {
-    const item = message.params.item;
-    if (item.type === "agentMessage") console.log(item.text);
+  if (message.method === "item/commandExecution/requestApproval") {
+    send({ id: message.id, result: { decision: "decline" } });
+    return;
   }
 
   if (message.method === "turn/completed") {
-    const turn = message.params.turn;
-    completedTurns.get(turn.id)?.(turn);
-    completedTurns.delete(turn.id);
-  }
-
-  if ("id" in message && "method" in message) {
-    // 生产客户端应在这里展示审批、权限或用户输入 UI。
-    send({
-      id: message.id,
-      error: {
-        code: -32000,
-        message: "Demo client does not handle " + message.method,
-      },
-    });
+    console.log("turn completed:", message.params.turn);
   }
 });
 
 await request("initialize", {
   clientInfo: {
-    name: "app_server_demo",
-    title: "App Server Demo",
+    name: "minimal-client",
+    title: "Minimal Client",
     version: "0.1.0",
   },
 });
-notify("initialized");
+
+send({ method: "initialized", params: {} });
 
 const started = await request("thread/start", {
-  cwd,
-  model: null,
-  sandbox: "read-only",
-  approvalPolicy: "never",
-  developerInstructions: "只读分析，不修改文件。",
+  cwd: process.cwd(),
 });
 
-console.log("threadId:", started.thread.id);
-console.log("instructionSources:", started.instructionSources ?? []);
-
-const turnStarted = await request("turn/start", {
+await request("turn/start", {
   threadId: started.thread.id,
-  input: [
-    { type: "text", text: "概括这个项目的结构，不要修改文件。" },
-  ],
-  sandboxPolicy: {
-    type: "readOnly",
-    networkAccess: false,
-  },
+  input: [{ type: "text", text: "总结这个仓库的结构。" }],
 });
-
-const completed = await waitForTurn(turnStarted.turn.id);
-console.log("turn status:", completed.status);
-
-proc.stdin.end();
 ~~~
 
-运行：
+这个例子仍然不是生产客户端。它没有处理超时、重连、取消、全部反向请求、事件归并和业务幂等，这些将在最后一章解决。
 
-~~~bash
-node app-server-demo.mjs /absolute/project/path
-~~~
+## 命令完整指南
 
-这个 Demo 只覆盖成功路径。生产客户端必须补上：请求超时、进程退出、JSON 解析错误、重连、审批、用户输入、权限请求和所有 failed 状态的展示。
+下面的命令表以本机 `codex-cli 0.149.0` 的 stable Schema 为准。“必填入参”只列 Schema 强制字段；空白不等于没有可选参数。“主要结果”是客户端最常用的响应内容，不替代生成的 JSON Schema。
 
-### 3.6 常用调用参数
+### 连接、Thread 与分组
 
-下面是写客户端时最常用的参数。完整字段以当前生成的 ClientRequest.json 和 v2/*.json 为准。
+| 方法 | 必填入参 | 主要结果或行为 |
+| --- | --- | --- |
+| `initialize` | `clientInfo` | `userAgent`、平台和 `codexHome` |
+| `thread/start` | 无 | 新 `thread` 与生效的 cwd、模型、沙箱、审批配置 |
+| `thread/resume` | `threadId` | 恢复后的 `thread` 与生效配置 |
+| `thread/read` | `threadId` | `thread`；可选包含 Turns |
+| `thread/list` | 无 | `data`、分页 cursor |
+| `thread/loaded/list` | 无 | 当前进程已加载的 Thread |
+| `thread/fork` | `threadId` | 新 Thread；可用 `lastTurnId` 截断历史 |
+| `thread/archive` | `threadId` | 归档并通知 `thread/archived` |
+| `thread/unarchive` | `threadId` | 恢复 Thread 与 `thread/unarchived` |
+| `thread/delete` | `threadId` | 永久删除并通知 `thread/deleted` |
+| `thread/unsubscribe` | `threadId` | 当前连接停止接收该 Thread 事件 |
+| `thread/name/set` | `threadId`、`name` | 更新可见名称 |
+| `thread/metadata/update` | `threadId` | 更新 pin 等元数据 |
+| `thread/compact/start` | `threadId` | 立即返回；压缩进度走 Item / Turn 通知 |
+| `thread/rollback` | `threadId`、`numTurns` | 回滚若干 Turn 并通知 `thread/reverted` |
+| `thread/inject_items` | `threadId`、`items` | 注入模型可见历史，不创建用户 Turn |
+| `thread/shellCommand` | `threadId`、`command` | 启动用户明确发起的非沙箱 Shell 命令 |
+| `thread/approveGuardianDeniedAction` | `threadId`、`event` | 审批 Guardian 拒绝的行动 |
+| `thread/goal/set` | `threadId` | 创建或更新持久 Goal |
+| `thread/goal/get` | `threadId` | 当前 Goal |
+| `thread/goal/clear` | `threadId` | 清除 Goal |
+| `thread/section/move` | `threadId`、`sectionId` | 移动到指定 Section |
+| `threadSection/list` | 无 | Section 列表 |
+| `threadSection/create` | `name` | 新 Section |
+| `threadSection/update` | `sectionId`、`name` | 更新 Section |
+| `threadSection/delete` | `sectionId` | 删除 Section |
 
-#### 3.6.1 initialize
+#### 恢复和读取 Demo
 
-请求：
-
-~~~json
-{
-  "method": "initialize",
-  "id": 1,
-  "params": {
-    "clientInfo": {
-      "name": "my_client",
-      "title": "My Client",
-      "version": "0.1.0"
-    },
-    "capabilities": {
-      "experimentalApi": false,
-      "optOutNotificationMethods": [],
-      "requestAttestation": false,
-      "mcpServerOpenaiFormElicitation": false
-    }
-  }
-}
-~~~
-
-| 参数 | 作用 |
-|---|---|
-| clientInfo.name | 客户端标识；企业集成应使用稳定名称 |
-| clientInfo.title | 展示名称 |
-| clientInfo.version | 客户端版本 |
-| capabilities.experimentalApi | 是否启用实验方法和字段 |
-| capabilities.optOutNotificationMethods | 精确屏蔽指定通知，不支持通配符 |
-| capabilities.requestAttestation | 允许服务端请求客户端生成 attestation |
-| capabilities.mcpServerOpenaiFormElicitation | 允许 MCP 使用 OpenAI 扩展表单 |
-
-默认不要打开 experimentalApi。只有确认目标版本 Schema、客户端处理逻辑和升级策略后，才启用实验 API。
-
-#### 3.6.2 thread/start
-
-最小请求：
-
-~~~json
-{
-  "method": "thread/start",
-  "id": 10,
-  "params": {
-    "cwd": "/workspace/project",
-    "sandbox": "workspace-write",
-    "approvalPolicy": "on-request",
-    "developerInstructions": "你负责当前目录内的后端任务。"
-  }
-}
-~~~
-
-常用参数：
-
-| 参数 | 说明 |
-|---|---|
-| cwd | Thread 的工作目录；也影响 AGENTS.md 发现 |
-| model | 指定模型；建议先用 model/list |
-| modelProvider | 指定模型 Provider |
-| serviceTier | 服务层级；按当前模型和 Provider 能力使用 |
-| approvalPolicy | untrusted、on-request、never 或 granular 配置 |
-| approvalsReviewer | user、auto_review 或兼容值 guardian_subagent |
-| sandbox | read-only、workspace-write、danger-full-access |
-| personality | none、friendly、pragmatic |
-| baseInstructions | 覆盖基础指令；通常不要改 |
-| developerInstructions | 添加客户端或角色约束；推荐使用 |
-| config | 对该 Thread 应用配置覆盖；注意可能产生持久影响 |
-| ephemeral | true 表示不创建普通持久 Thread |
-| threadSource | 客户端提供的来源分类，版本敏感 |
-| sessionStartSource | 会话来源，版本敏感 |
-
-thread/start 返回里重点检查：
-
-~~~json
-{
-  "thread": {
-    "id": "thr_123"
-  },
-  "cwd": "/workspace/project",
-  "instructionSources": [
-    "/workspace/project/AGENTS.md"
-  ]
-}
-~~~
-
-如果 cwd 或 instructionSources 不符合预期，不要继续派发任务。
-
-#### 3.6.3 thread/resume
+恢复会把 Thread 加载到当前 App Server，并允许继续 `turn/start`：
 
 ~~~json
 {
   "method": "thread/resume",
-  "id": 11,
+  "id": 10,
   "params": {
     "threadId": "thr_123",
-    "cwd": "/workspace/project",
-    "model": "MODEL_FROM_MODEL_LIST",
-    "sandbox": "workspace-write",
-    "approvalPolicy": "on-request",
-    "developerInstructions": "继续作为后端成员工作。"
+    "cwd": "/workspace/project"
   }
 }
 ~~~
 
-常用参数与 thread/start 大体相同，但 threadId 必填。恢复后应再次校验 cwd 和 instructionSources。恢复动作本身不会产生新的 Turn；只有后续 turn/start 才会执行任务。
+~~~json
+{
+  "id": 10,
+  "result": {
+    "thread": { "id": "thr_123" },
+    "cwd": "/workspace/project",
+    "model": "gpt-5.6-terra",
+    "modelProvider": "openai",
+    "sandbox": "workspace-write",
+    "approvalPolicy": "on-request",
+    "approvalsReviewer": "user"
+  }
+}
+~~~
 
-#### 3.6.4 thread/read、thread/list、thread/fork
-
-只读 Thread：
+只读取而不恢复：
 
 ~~~json
 {
   "method": "thread/read",
-  "id": 12,
+  "id": 11,
   "params": {
     "threadId": "thr_123",
     "includeTurns": true
@@ -769,224 +459,66 @@ thread/start 返回里重点检查：
 }
 ~~~
 
-列出 Thread：
-
 ~~~json
 {
-  "method": "thread/list",
-  "id": 13,
-  "params": {
-    "limit": 20,
-    "cursor": null,
-    "archived": false,
-    "cwd": "/workspace/project",
-    "isPinned": null,
-    "searchTerm": "backend",
-    "sortKey": "created_at",
-    "sortDirection": "desc"
-  }
-}
-~~~
-
-thread/list 使用返回的 cursor 翻页。当前版本还支持 modelProviders、sourceKinds 和 useStateDbOnly 等过滤参数。
-
-Fork：
-
-~~~json
-{
-  "method": "thread/fork",
-  "id": 14,
-  "params": {
-    "threadId": "thr_123",
-    "lastTurnId": "turn_456",
-    "ephemeral": false,
-    "cwd": "/workspace/project",
-    "model": "MODEL_FROM_MODEL_LIST",
-    "developerInstructions": "这是一个实验分支，只做只读分析。"
-  }
-}
-~~~
-
-lastTurnId 表示只复制到该 Turn；不能指定仍在执行的 Turn。ephemeral: true 可创建内存中的临时分支。
-
-#### 3.6.5 turn/start
-
-最小请求：
-
-~~~json
-{
-  "method": "turn/start",
-  "id": 30,
-  "params": {
-    "threadId": "thr_123",
-    "input": [
-      {
-        "type": "text",
-        "text": "运行测试并说明失败原因。"
-      }
-    ]
-  }
-}
-~~~
-
-常用参数：
-
-| 参数 | 说明 |
-|---|---|
-| threadId | 必填，目标 Thread |
-| input | 必填，输入 Item 数组 |
-| model | 覆盖当前 Turn 及后续 Turn 的模型 |
-| effort | 推理 effort；以 model/list 返回能力为准 |
-| summary | 推理摘要策略，如 auto、concise、detailed、none |
-| personality | 覆盖人格设置 |
-| cwd | 覆盖工作目录；会影响当前及后续 Turn |
-| approvalPolicy | 覆盖审批策略 |
-| approvalsReviewer | 覆盖审批路由 |
-| sandboxPolicy | 覆盖当前 Turn 的 Sandbox |
-| serviceTier | 覆盖服务层级 |
-| clientUserMessageId | 客户端生成的用户消息幂等/关联 ID |
-| outputSchema | 约束最终 Assistant Message 的 JSON Schema |
-
-除 outputSchema 外，许多 Turn 级覆盖会成为该 Thread 后续 Turn 的默认值。客户端不要把一次临时配置误认为只影响当前请求。
-
-#### 3.6.6 turn/start.input
-
-文本：
-
-~~~json
-{
-  "type": "text",
-  "text": "解释支付模块的调用链。"
-}
-~~~
-
-本地图片：
-
-~~~json
-{
-  "type": "localImage",
-  "path": "/absolute/path/screenshot.png",
-  "detail": "high"
-}
-~~~
-
-远程图片：
-
-~~~json
-{
-  "type": "image",
-  "url": "https://example.com/design.png",
-  "detail": "auto"
-}
-~~~
-
-显式 Skill：
-
-~~~json
-{
-  "type": "skill",
-  "name": "skill-creator",
-  "path": "/absolute/path/SKILL.md"
-}
-~~~
-
-输入类型还包括 audio、localAudio 和 mention。显式使用 Skill 时，文本中也应包含 $skill-name，以保持用户意图和输入 Item 一致。
-
-#### 3.6.7 Turn 级 Sandbox
-
-只读：
-
-~~~json
-{
-  "type": "readOnly",
-  "networkAccess": false
-}
-~~~
-
-工作区可写：
-
-~~~json
-{
-  "type": "workspaceWrite",
-  "writableRoots": ["/workspace/project"],
-  "networkAccess": false
-}
-~~~
-
-完全访问：
-
-~~~json
-{
-  "type": "dangerFullAccess"
-}
-~~~
-
-Thread 级 sandbox 和 Turn 级 sandboxPolicy 命名不同，不要混用。dangerFullAccess 必须由产品明确提示风险。
-
-#### 3.6.8 结构化输出
-
-~~~json
-{
-  "method": "turn/start",
-  "id": 31,
-  "params": {
-    "threadId": "thr_123",
-    "input": [
-      {
-        "type": "text",
-        "text": "检查测试状态并返回结构化结论。"
-      }
-    ],
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "status": {
-          "type": "string",
-          "enum": ["pass", "fail"]
-        },
-        "summary": {
-          "type": "string"
-        }
-      },
-      "required": ["status", "summary"],
-      "additionalProperties": false
+  "id": 11,
+  "result": {
+    "thread": {
+      "id": "thr_123",
+      "turns": []
     }
   }
 }
 ~~~
 
-outputSchema 只约束最终 Assistant Message，不保证 Turn 成功。客户端仍要等待 turn/completed，并处理 failed、interrupted 和未响应的服务端请求。
+### Turn 与 Review
 
-#### 3.6.9 turn/steer 和 turn/interrupt
+| 方法 | 必填入参 | 主要结果或行为 |
+| --- | --- | --- |
+| `turn/start` | `threadId`、`input` | 新 `turn`；执行通过通知流出 |
+| `turn/steer` | `threadId`、`expectedTurnId`、`input` | `turnId`；向活动 Turn 追加输入 |
+| `turn/interrupt` | `threadId`、`turnId` | 请求中断；最终仍等待 `turn/completed` |
+| `review/start` | `threadId`、`target` | `reviewThreadId` 与 Review Turn |
 
-给正在运行的 Turn 追加指令：
+#### 追加指令
+
+`turn/steer` 只用于仍在运行的 Turn：
 
 ~~~json
 {
   "method": "turn/steer",
-  "id": 32,
+  "id": 20,
   "params": {
     "threadId": "thr_123",
     "expectedTurnId": "turn_456",
-    "clientUserMessageId": "msg_789",
+    "clientUserMessageId": "msg_steer_001",
     "input": [
       {
         "type": "text",
-        "text": "先处理失败测试，不要修改其他模块。"
+        "text": "先不要修改代码，只解释失败原因。"
       }
     ]
   }
 }
 ~~~
 
-expectedTurnId 必须等于当前正在执行的 Turn。turn/steer 不能附带 model、cwd、sandboxPolicy 或 outputSchema。Turn 已结束时，必须使用新的 turn/start。
+~~~json
+{
+  "id": 20,
+  "result": {
+    "turnId": "turn_456"
+  }
+}
+~~~
 
-中断：
+Turn 已结束时，不要重试 `turn/steer`，应创建新的 `turn/start`。
+
+#### 中断
 
 ~~~json
 {
   "method": "turn/interrupt",
-  "id": 33,
+  "id": 21,
   "params": {
     "threadId": "thr_123",
     "turnId": "turn_456"
@@ -994,126 +526,77 @@ expectedTurnId 必须等于当前正在执行的 Turn。turn/steer 不能附带 
 }
 ~~~
 
-请求成功不等于 Turn 已完成。仍应等待最终 turn/completed，状态通常为 interrupted。
+成功响应通常为空对象。请求成功只表示中断已提交，客户端仍要等待状态为 interrupted 的 `turn/completed`。
 
-### 3.7 高级用法
+### 命令、文件与搜索
 
-#### 3.7.1 Dynamic Tools
+| 方法 | 必填入参 | 主要结果或行为 |
+| --- | --- | --- |
+| `command/exec` | `command` | `stdout`、`stderr`、`exitCode` |
+| `command/exec/write` | `processId` | 向流式命令写 stdin |
+| `command/exec/resize` | `processId`、`size` | 调整 PTY |
+| `command/exec/terminate` | `processId` | 终止命令 |
+| `fs/readFile` | `path` | `dataBase64` |
+| `fs/writeFile` | `path`、`dataBase64` | 写入结果 |
+| `fs/createDirectory` | `path` | 创建目录 |
+| `fs/getMetadata` | `path` | 文件类型、大小、时间等元数据 |
+| `fs/readDirectory` | `path` | 目录条目 |
+| `fs/remove` | `path` | 删除结果；调用前必须做产品级确认 |
+| `fs/copy` | `sourcePath`、`destinationPath` | 复制结果 |
+| `fs/watch` | `path`、`watchId` | 开始监听，变化走 `fs/changed` |
+| `fs/unwatch` | `watchId` | 停止监听 |
+| `fuzzyFileSearch` | `query`、`roots` | 模糊文件搜索结果 |
 
-Dynamic Tools 允许客户端在创建 Thread 时注册工具，Codex 需要调用时再由客户端执行。它是实验能力。
-
-初始化时开启：
-
-~~~json
-{
-  "method": "initialize",
-  "id": 1,
-  "params": {
-    "clientInfo": {
-      "name": "team-controller",
-      "title": "Team Controller",
-      "version": "0.1.0"
-    },
-    "capabilities": {
-      "experimentalApi": true
-    }
-  }
-}
-~~~
-
-创建 Thread 时提供工具定义：
+同步命令示例：
 
 ~~~json
 {
-  "method": "thread/start",
-  "id": 40,
+  "method": "command/exec",
+  "id": 30,
   "params": {
+    "command": ["git", "status", "--short"],
     "cwd": "/workspace/project",
-    "dynamicTools": [
-      {
-        "type": "function",
-        "name": "get_build_status",
-        "description": "读取构建状态",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "buildId": { "type": "string" }
-          },
-          "required": ["buildId"],
-          "additionalProperties": false
-        }
-      }
-    ]
+    "timeoutMs": 10000
   }
 }
 ~~~
 
-服务端请求工具调用：
-
-~~~text
-item/tool/call
-~~~
-
-客户端用同一个请求 ID 返回：
-
 ~~~json
 {
-  "id": 9004,
+  "id": 30,
   "result": {
-    "success": true,
-    "contentItems": [
-      {
-        "type": "inputText",
-        "text": "build passed"
-      }
-    ]
+    "stdout": " M src/app.ts\n",
+    "stderr": "",
+    "exitCode": 0
   }
 }
 ~~~
 
-工具实现必须自行做鉴权、参数校验、超时和幂等。Dynamic Tools 的定义可能写入 Thread rollout metadata；恢复 Thread 时不要假定不同版本都能自动兼容旧定义。
+不要把 `command/exec` 和 Turn 中由 Agent 发起的 `commandExecution` Item 混为一谈。前者是客户端直接调用；后者属于 Agent Loop，由 Turn 的 Item 事件呈现。
 
-#### 3.7.2 Plan / Collaboration Mode
+### 模型、配置与权限
 
-计划可以通过以下事件观察：
+| 方法 | 必填入参 | 主要结果或行为 |
+| --- | --- | --- |
+| `model/list` | 无 | 模型、effort、输入模态和分页 cursor |
+| `modelProvider/capabilities/read` | 无 | Provider 与模型组合的能力边界 |
+| `permissionProfile/list` | 无 | 可用权限 Profile 与约束 |
+| `experimentalFeature/list` | 无 | Feature 生命周期和启用状态 |
+| `experimentalFeature/enablement/set` | `enablement` | 修改当前进程支持的 Feature 状态 |
+| `config/read` | 无 | `config`、`origins` 和可选 layers |
+| `config/value/write` | `keyPath`、`value`、`mergeStrategy` | 写入单个配置值 |
+| `config/batchWrite` | `edits` | 批量配置写入结果 |
+| `configRequirements/read` | 无 | 有效的托管配置要求 |
+| `config/mcpServer/reload` | 无 | 重载 MCP 配置 |
+| `windowsSandbox/readiness` | 无 | Windows Sandbox 就绪状态 |
+| `windowsSandbox/setupStart` | `mode` | 启动 Windows Sandbox 配置 |
 
-- item/plan/delta：计划增量；
-- turn/plan/updated：当前计划快照；
-- item/completed 中的最终 plan Item。
-
-当前版本的 collaborationMode 属于实验字段，需要初始化时开启 experimentalApi：
-
-~~~json
-{
-  "method": "turn/start",
-  "id": 41,
-  "params": {
-    "threadId": "thr_123",
-    "input": [
-      { "type": "text", "text": "先分析方案，不要修改文件。" }
-    ],
-    "collaborationMode": {
-      "mode": "plan",
-      "settings": {
-        "model": "MODEL_FROM_MODEL_LIST",
-        "reasoning_effort": "medium",
-        "developer_instructions": null
-      }
-    }
-  }
-}
-~~~
-
-collaborationMode 的设置可能覆盖同一请求中的模型、推理 effort 和 Developer Instructions。计划是 Turn 的执行计划，不要直接当成业务 Task 数据库。
-
-#### 3.7.3 模型和 Provider 能力
-
-先查询模型，不要在 UI 硬编码模型列表：
+查询模型：
 
 ~~~json
 {
   "method": "model/list",
-  "id": 50,
+  "id": 40,
   "params": {
     "limit": 50,
     "cursor": null,
@@ -1122,380 +605,214 @@ collaborationMode 的设置可能覆盖同一请求中的模型、推理 effort 
 }
 ~~~
 
-model/list 结果可能包含：
+响应中的 `data` 才是当前账户和 Provider 真正可用的模型。不要在产品中硬编码模型或 reasoning effort 列表。
 
-- 模型 ID、名称和描述；
-- 支持的 reasoning effort；
-- 默认 effort；
-- 输入模态；
-- 推荐升级模型；
-- 是否隐藏。
+### Skills、Hooks、MCP、Plugin 与 App
 
-还可以调用：
+| 方法 | 必填入参 | 主要结果或行为 |
+| --- | --- | --- |
+| `skills/list` | 无 | 按 cwd 返回 Skills |
+| `skills/extraRoots/set` | `extraRoots` | 替换进程级额外 Skill 根 |
+| `skills/config/write` | `enabled` | 更新 Skill 启用状态 |
+| `hooks/list` | 无 | 生命周期 Hooks |
+| `marketplace/add` | `source` | 添加 Marketplace |
+| `marketplace/remove` | `marketplaceName` | 移除 Marketplace |
+| `marketplace/upgrade` | 无 | 刷新一个或全部 Marketplace |
+| `plugin/list` | 无 | Plugin 列表 |
+| `plugin/installed` | 无 | 已安装 Plugin |
+| `plugin/read` | `pluginName` | Plugin 详情 |
+| `plugin/install` | `pluginName` | 安装 Plugin |
+| `plugin/uninstall` | `pluginId` | 卸载 Plugin |
+| `plugin/skill/read` | `remoteMarketplaceName`、`remotePluginId`、`skillName` | 读取远程 Skill |
+| `plugin/share/save` | `pluginPath` | 保存共享 Plugin |
+| `plugin/share/updateTargets` | `remotePluginId`、`discoverability`、`shareTargets` | 更新共享范围 |
+| `plugin/share/list` | 无 | 共享 Plugin 列表 |
+| `plugin/share/checkout` | `remotePluginId` | 拉取共享 Plugin |
+| `plugin/share/delete` | `remotePluginId` | 删除共享 Plugin |
+| `app/list` | 无 | 可访问 App / Connector |
+| `app/read` | `appIds` | App 元数据和工具摘要 |
+| `app/installed` | 无 | 已提交的 Connector Runtime 快照 |
+| `mcpServerStatus/list` | 无 | MCP Server 状态 |
+| `mcpServer/oauth/login` | `name` | 启动 MCP OAuth；结果由完成通知确认 |
+| `mcpServer/resource/read` | `server`、`uri` | MCP Resource 内容 |
+| `mcpServer/tool/call` | `server`、`threadId`、`tool` | MCP 工具结果 |
 
-~~~text
-modelProvider/capabilities/read
-~~~
+这些方法并不意味着所有能力都对每个账户、平台或配置开放。客户端应显示服务端返回的不可用原因，而不是把“Schema 中存在”误写成“当前用户一定可用”。
 
-effort 是模型能力，不要假设每个模型都支持相同枚举。模型或 effort 不支持时，应直接展示服务端错误并保留可诊断信息。
+### 账号、反馈与外部配置迁移
 
-#### 3.7.4 Skills、Hooks、MCP、Plugin 和 App
+| 方法 | 必填入参 | 主要结果或行为 |
+| --- | --- | --- |
+| `account/read` | 无 | 当前账号与 `requiresOpenaiAuth` |
+| `account/login/start` | 取决于登录方式 | `loginId` 或即时结果 |
+| `account/login/cancel` | `loginId` | 取消登录 |
+| `account/logout` | 无 | 清除当前登录 |
+| `account/rateLimits/read` | 无 | 当前 Rate Limit 快照 |
+| `account/rateLimitResetCredit/consume` | `idempotencyKey` | 额度重置结果 |
+| `account/usage/read` | 无 | 使用量摘要 |
+| `account/workspaceMessages/read` | 无 | Workspace 消息 |
+| `account/sendAddCreditsNudgeEmail` | `creditType` | 邮件请求结果 |
+| `feedback/upload` | `classification` | 反馈上传结果 |
+| `externalAgentConfig/detect` | 无 | 可迁移的外部 Agent 配置 |
+| `externalAgentConfig/import` | `migrationItems` | `importId`；进度和完成走通知 |
+| `externalAgentConfig/import/recordHistory` | `providerId`、`itemTypeResults` | 记录导入历史 |
+| `externalAgentConfig/import/readHistories` | 无 | 历史导入记录 |
 
-常用发现和配置接口：
+### 服务端反向请求
 
-~~~text
-skills/list
-skills/extraRoots/set
-skills/config/write
-hooks/list
-config/read
-config/mcpServer/reload
-mcpServerStatus/list
-mcpServer/resource/read
-mcpServer/tool/call
-mcpServer/oauth/login
-app/list
-~~~
+下面这些不是客户端主动命令，而是服务端发起、客户端必须回答的请求：
 
-MCP 状态查询可使用：
+| 方法 | 客户端要做什么 |
+| --- | --- |
+| `item/commandExecution/requestApproval` | 展示命令或网络审批，并返回决定 |
+| `item/fileChange/requestApproval` | 展示文件修改审批 |
+| `item/permissions/requestApproval` | 展示额外文件或网络权限 |
+| `item/tool/requestUserInput` | 渲染结构化问题并返回答案 |
+| `item/tool/call` | 执行 Dynamic Tool 并返回内容 |
+| `mcpServer/elicitation/request` | 处理 MCP 表单或 URL 确认 |
+| `account/chatgptAuthTokens/refresh` | 为受支持客户端刷新 ChatGPT Auth Token |
+| `attestation/generate` | 生成请求的 Attestation |
+| `execCommandApproval`、`applyPatchApproval` | 兼容旧审批协议 |
 
-~~~json
-{
-  "method": "mcpServerStatus/list",
-  "id": 60,
-  "params": {
-    "threadId": "thr_123",
-    "detail": "full",
-    "limit": 50,
-    "cursor": null
-  }
-}
-~~~
+回答后，服务端会发送 `serverRequest/resolved`。如果客户端没有对应 Handler，Turn 可能一直停在等待状态。
 
-Plugin 的 list、read、install、uninstall 等接口部分仍处于开发中，不要把它们当作稳定生产协议。不同 Codex 版本的 Apps RPC 也可能不同，必须先查生成 Schema。
+### 关键通知
 
-#### 3.7.5 账号和鉴权
+客户端至少要正确归并这些通知：
 
-查看账号：
+| 事实 | 通知 |
+| --- | --- |
+| Thread 已创建或状态改变 | `thread/started`、`thread/status/changed` |
+| Turn 开始和结束 | `turn/started`、`turn/completed` |
+| Item 生命周期 | `item/started`、`item/completed` |
+| Agent 流式文本 | `item/agentMessage/delta` |
+| 命令输出 | `item/commandExecution/outputDelta` |
+| 文件 Patch | `item/fileChange/patchUpdated` |
+| 计划快照 | `turn/plan/updated` |
+| Diff 快照 | `turn/diff/updated` |
+| Token 使用量 | `thread/tokenUsage/updated` |
+| 错误与警告 | `error`、`warning`、`configWarning` |
 
-~~~json
-{
-  "method": "account/read",
-  "id": 70,
-  "params": {
-    "refreshToken": false
-  }
-}
-~~~
+### 实验命令
 
-API Key 登录：
+使用 `generate-json-schema --experimental` 会额外暴露尚未进入稳定 Schema 的方法：
 
-~~~json
-{
-  "method": "account/login/start",
-  "id": 71,
-  "params": {
-    "type": "apiKey",
-    "apiKey": "sk-..."
-  }
-}
-~~~
+| 领域 | experimental-only 方法 |
+| --- | --- |
+| Bedrock 账号 | `account/bedrock/discover`、`account/bedrock/setup` |
+| 协作模式 | `collaborationMode/list` |
+| 执行环境 | `environment/add`、`environment/info`、`environment/status` |
+| 增量文件搜索 | `fuzzyFileSearch/sessionStart`、`fuzzyFileSearch/sessionUpdate`、`fuzzyFileSearch/sessionStop` |
+| Memory 与 Plugin | `memory/reset`、`plugin/search` |
+| 独立进程 | `process/spawn`、`process/writeStdin`、`process/resizePty`、`process/kill` |
+| Project | `project/create`、`project/read`、`project/list`、`project/update`、`project/move`、`project/import`、`project/delete` |
+| Remote Control | `remoteControl/enable`、`remoteControl/disable`、`remoteControl/status/read`、`remoteControl/pairing/start`、`remoteControl/pairing/status`、`remoteControl/client/list`、`remoteControl/client/revoke` |
+| 诊断 | `server/diagnostics` |
+| Thread 后台终端 | `thread/backgroundTerminals/list`、`thread/backgroundTerminals/terminate`、`thread/backgroundTerminals/clean` |
+| Thread 上下文与查询 | `thread/items/list`、`thread/turns/list`、`thread/search`、`thread/searchOccurrences`、`thread/revert`、`thread/memoryMode/set`、`thread/settings/update` |
+| Thread Elicitation 计数 | `thread/increment_elicitation`、`thread/decrement_elicitation` |
+| Thread Queue | `thread/queue/add`、`thread/queue/list`、`thread/queue/update`、`thread/queue/reorder`、`thread/queue/delete`、`thread/queue/start` |
+| Thread Realtime | `thread/realtime/start`、`thread/realtime/stop`、`thread/realtime/appendText`、`thread/realtime/appendAudio`、`thread/realtime/appendSpeech`、`thread/realtime/listVoices` |
 
-其他登录方式可能包括 ChatGPT 浏览器登录和 Device Code。客户端不应记录、打印或持久化明文 Token；鉴权能力和可用登录类型也会受当前运行环境影响。
+Schema 中还包含 `mock/experimentalMethod`，它用于实验协议测试，不应成为产品集成入口。
 
-#### 3.7.6 远程连接和认证
+这些方法只有在 `initialize.params.capabilities.experimentalApi = true` 且当前构建实际支持时才应调用。实验方法必须做版本探测、失败关闭和升级回归，不能成为业务持久状态的唯一入口。
 
-本机 WebSocket：
+## 如何接入产品
 
-~~~bash
-codex app-server --listen ws://127.0.0.1:4500
-~~~
-
-远程 WebSocket 至少需要：
-
-- TLS，即 wss://；
-- capability token 或 signed bearer token；
-- 服务端认证参数；
-- 客户端在握手阶段发送 Authorization: Bearer ...；
-- 对过载错误 -32001 使用带抖动的指数退避。
-
-支持的服务端参数包括：
-
-~~~text
---ws-auth capability-token
---ws-token-file /absolute/path
---ws-token-sha256 HEX
---ws-auth signed-bearer-token
---ws-shared-secret-file /absolute/path
---ws-issuer ISSUER
---ws-audience AUDIENCE
---ws-max-clock-skew-seconds SECONDS
-~~~
-
-不要把未认证的非 loopback WebSocket 直接暴露到公网。
-
-### 3.8 生产客户端应该怎么设计
+协议能跑通，只完成了最容易的一半。生产客户端真正要拥有的是状态归属、故障恢复和人类决策。
 
 <Figure
   src="/images/posts/codex-app-server-guide/client-architecture.svg"
-  alt="生产级 Codex App Server 客户端分层架构，依次包含业务界面、协议客户端、交互决策、传输层和 App Server"
-  caption="客户端应把业务状态、协议状态、用户决策和传输生命周期分开，避免把所有事件处理塞进一条连接回调。"
+  alt="生产级 Codex App Server 客户端分层架构，包含业务界面、协议客户端、交互决策、传输层和 App Server"
+  caption="客户端应把业务状态、协议状态、用户决策和传输生命周期分开，避免把所有处理塞进一条消息回调。"
 />
 
-建议拆成五层：
+### Transport
 
-#### Transport
+负责启动或连接 App Server、按 JSONL 或 WebSocket frame 解码消息、处理关闭和重连。它不知道业务 Task，也不判断 Turn 是否成功。
 
-- 管理 stdio、WebSocket 或 Unix Socket；
-- 按行或按帧解析消息；
-- 处理关闭、重连和进程退出；
-- 不保存业务 Task 状态。
+### RPC Client
 
-#### RPC Client
+分配请求 ID，维护 Pending Promise，处理响应、超时和取消。断线时必须拒绝或迁移所有未完成 Promise，不能让调用永久等待。
 
-- 分配唯一请求 ID；
-- 管理 Pending Promise；
-- 统一处理 result / error；
-- 对长时间请求设置超时或取消策略。
+### Server Request Router
 
-#### Server Request Router
+按方法分发审批、用户输入、Dynamic Tool 和 MCP Elicitation。每个 Handler 都要带上原请求 `id`、`threadId` 和 `turnId`。
 
-- 路由命令审批、文件审批、权限申请、用户输入、MCP elicitation；
-- 对 Dynamic Tool 做鉴权、参数校验和幂等；
-- 始终用原请求 ID 回复。
+### Event Reducer
 
-#### Event Reducer
+使用 `threadId + turnId + itemId` 归并事件：
 
-- 使用 threadId + turnId + itemId 归并事件；
-- Delta 只更新临时 UI；
-- item/completed 覆盖 Item 最终值；
-- turn/completed 结束 Turn；
-- 失败和不可恢复错误必须落到可见状态。
+- Delta 更新临时 UI；
+- `item/completed` 覆盖 Item 最终值；
+- `turn/completed` 结束 Turn；
+- `serverRequest/resolved` 清理待处理交互；
+- `error` 和不可恢复状态进入可见故障面。
 
-#### 业务层
+### 业务层
 
-- 保存 businessObjectId → threadId；
-- 保存业务 Task、依赖、验收和幂等状态；
-- 不从自然语言猜测完成状态；
-- 不把完整 Codex 对话复制成业务数据库的唯一事实源。
-
-### 3.9 Agent Team 的正确接入方式
-
-轻量模型：
+业务系统至少保存：
 
 ~~~text
-一个 Team Member 绑定一个 Thread
-一个 Thread 包含多个 Turn
-一个业务 Task 绑定 memberId、threadId 和验收状态
+businessObjectId
+threadId
+activeTurnId
+clientUserMessageId / 幂等键
+业务验收状态
+关键事件快照或游标
 ~~~
 
-创建成员 Thread 时：
+不要让 `turn/completed` 直接驱动“需求完成”“发布成功”或“QA 通过”。Codex 只知道 Agent Turn 的状态，不知道你的业务合同。
 
-1. 用成员工作目录设置 cwd；
-2. 用该目录生效的 AGENTS.md 放工程长期约束；
-3. 用 developerInstructions 放成员角色和 Team 约束；
-4. 检查返回的 instructionSources；
-5. 通过 turn/start.input 发送当前具体工作。
-
-恢复成员 Thread 时：
-
-1. 从业务系统读取 threadId；
-2. 调用 thread/read 确认 Thread 仍存在；
-3. 需要继续时调用 thread/resume；
-4. 再次校验 cwd 和 instructionSources；
-5. 发送新的 turn/start。
-
-不要每个 Turn 重复发送完整 Team JSON，也不要把 Dashboard 当作连接持有者。后台 Controller 应持有 App Server 连接，Dashboard 只读取 Controller 的状态。
-
-### 3.10 持久化、重连和故障处理
-
-推荐恢复流程：
+### 恢复流程
 
 ~~~text
-启动 App Server
+启动或连接 App Server
   → initialize / initialized
   → 从业务库读取 threadId
-  → thread/read 确认存在
-  → thread/resume 恢复连接
-  → 校验 cwd / instructionSources
-  → 读取 thread/status 或 thread/read
-  → 开始新的 turn/start
+  → thread/read 确认 Thread 存在
+  → thread/resume 恢复运行上下文
+  → 校验 cwd、模型、沙箱和 instructionSources
+  → 读取当前状态
+  → 决定继续 turn/start、等待活动 Turn 或进入人工处理
 ~~~
 
-不要：
+不要因为连接断开就创建新 Thread。先区分：
 
-- 因连接断开就创建替代 Thread；
-- 因暂时没有事件就推断 Turn 已完成；
-- 把 Delta 当成已持久化的最终内容；
-- 重复发送没有幂等保护的业务写操作；
-- 让服务端反向请求无人处理。
+- 请求是否已被 App Server 接收；
+- Turn 是否仍在运行；
+- 事件是否只是没有送达当前连接；
+- Thread 是否仍在持久化存储中；
+- 业务动作是否具备幂等保护。
 
-#### 常见问题排查
+### 最常见的错误
 
-| 现象 | 检查项 |
-|---|---|
-| 所有请求都报 Not initialized | 是否等待 initialize 成功后再发送 initialized 和其他请求 |
-| JSON 解析失败 | stdout 是否混入日志；stdio 是否按行解析 |
-| Thread 加载了错误指令 | cwd、AGENTS.md 层级和 instructionSources |
-| Turn 一直不结束 | 是否有审批、用户输入、权限或 MCP elicitation 未响应 |
-| turn/steer 失败 | Turn 是否仍在运行；expectedTurnId 是否匹配 |
-| 实验方法被拒绝 | 是否开启 experimentalApi，且使用 experimental Schema |
-| 升级后字段报错 | 重新生成 Schema，检查请求定义和枚举 |
-| WebSocket 连接失败 | listener 地址、TLS、认证和 Origin 策略 |
+| 现象 | 根因 | 修正 |
+| --- | --- | --- |
+| 请求全部报 Not initialized | 没完成握手 | 等待 `initialize` 响应后发送 `initialized` |
+| UI 一直显示运行中 | 只消费 Delta | 用 `item/completed`、`turn/completed` 收敛 |
+| Turn 永远不结束 | 反向请求无人处理 | 实现 Server Request Router |
+| 页面刷新后任务丢失 | 浏览器被当成事实源 | 在服务端保存 `threadId` 和业务映射 |
+| `turn/steer` 冲突 | Turn 已结束或 ID 不匹配 | 重新读取状态，必要时新建 Turn |
+| 升级后字段失败 | 客户端硬编码旧 Schema | 重新生成 stable / experimental Schema |
+| 远程 WebSocket 暴露风险 | 无 TLS 或 Auth | 使用 `wss://` 和握手认证 |
+| 业务提前宣布完成 | 把 Turn 完成当业务验收 | 业务层独立保存验收事实 |
 
-### 3.11 方法分类索引
+### 维护这份集成
 
-下表用于快速定位，具体参数仍以当前版本 Schema 为准。
+每次升级 Codex：
 
-#### Thread
+1. 记录 `codex --version`；
+2. 重新生成 stable 与 experimental Schema；
+3. 对比 Initialize、Thread、Turn、反向请求和事件定义；
+4. 用真实 Thread 验证握手、恢复、Turn、审批和完成事件；
+5. 只在验证后开放新增能力。
 
-~~~text
-thread/start
-thread/resume
-thread/read
-thread/list
-thread/fork
-thread/name/set
-thread/metadata/update
-thread/archive
-thread/unarchive
-thread/delete
-thread/unsubscribe
-thread/compact/start
-thread/inject_items
-thread/goal/set
-thread/goal/get
-thread/goal/clear
-thread/loaded/list
-~~~
+继续阅读：
 
-#### Turn 和 Review
+- [OpenAI App Server 官方文档](https://developers.openai.com/codex/app-server/)
+- [OpenAI：Unlocking the Codex harness](https://openai.com/index/unlocking-the-codex-harness/)
+- [Codex App Server 开源实现](https://github.com/openai/codex/tree/main/codex-rs/app-server)
 
-~~~text
-turn/start
-turn/steer
-turn/interrupt
-review/start
-~~~
-
-#### 命令和进程
-
-~~~text
-command/exec
-command/exec/write
-command/exec/resize
-command/exec/terminate
-process/spawn                 experimental
-process/writeStdin            experimental
-process/resizePty             experimental
-process/kill                  experimental
-~~~
-
-#### 模型、配置和扩展
-
-~~~text
-model/list
-modelProvider/capabilities/read
-config/read
-config/value/write
-config/batchWrite
-configRequirements/read
-skills/list
-skills/extraRoots/set
-skills/config/write
-hooks/list
-experimentalFeature/list
-experimentalFeature/enablement/set
-~~~
-
-#### MCP、Plugin 和 App
-
-~~~text
-mcpServerStatus/list
-mcpServer/resource/read
-mcpServer/tool/call
-mcpServer/oauth/login
-config/mcpServer/reload
-marketplace/add
-marketplace/remove
-marketplace/upgrade
-plugin/list
-plugin/read
-plugin/install
-plugin/uninstall
-plugin/skill/read
-app/list
-~~~
-
-#### 账号和其他
-
-~~~text
-account/read
-account/login/start
-account/login/cancel
-account/logout
-account/rateLimits/read
-account/usage/read
-feedback/upload
-externalAgentConfig/detect
-externalAgentConfig/import
-~~~
-
-#### 主要服务端通知
-
-~~~text
-thread/started
-thread/status/changed
-thread/closed
-thread/archived
-thread/unarchived
-thread/deleted
-thread/name/updated
-thread/tokenUsage/updated
-turn/started
-turn/completed
-turn/diff/updated
-turn/plan/updated
-item/started
-item/completed
-item/agentMessage/delta
-item/plan/delta
-item/reasoning/summaryTextDelta
-item/commandExecution/outputDelta
-item/fileChange/patchUpdated
-item/mcpToolCall/progress
-serverRequest/resolved
-error
-warning
-~~~
-
-#### 主要服务端反向请求
-
-~~~text
-item/commandExecution/requestApproval
-item/fileChange/requestApproval
-item/tool/requestUserInput       experimental
-item/permissions/requestApproval
-mcpServer/elicitation/request
-item/tool/call                   experimental
-attestation/generate
-~~~
-
-### 3.12 维护规则
-
-升级 Codex 后只做以下检查：
-
-1. 更新本文顶部的版本和校验日期；
-2. 重新生成 stable / experimental Schema；
-3. 对比 InitializeParams、ThreadStartParams、ThreadResumeParams、TurnStartParams 和事件定义；
-4. 用一个真实 Thread 验证初始化、恢复、Turn、审批和完成事件；
-5. 将实验字段和版本差异明确标注，不把网页示例直接当成本机协议。
-
-### 官方来源
-
-- [Codex App Server](https://learn.chatgpt.com/docs/app-server)
-- [Codex App Server 镜像入口](https://developers.openai.com/codex/app-server)
-- [Codex SDK](https://learn.chatgpt.com/docs/codex-sdk)
-- [Codex 非交互模式](https://learn.chatgpt.com/docs/non-interactive-mode)
-- [Codex 开源实现](https://github.com/openai/codex/tree/main/codex-rs/app-server)
-- [Codex 配置参考](https://developers.openai.com/codex/config-reference)
+App Server 最值得记住的不是某个方法名，而是所有权边界：Codex 拥有 Thread、Turn、Item 和执行事实；你的产品拥有用户、业务对象、验收状态和失败恢复策略。把这条边界分清，App Server 才会从“能调用”变成“能长期运行”。

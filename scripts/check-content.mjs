@@ -111,6 +111,10 @@ for (const file of walk(postsRoot).filter((path) => extname(path) === ".mdx")) {
   checkCodeFences(file, body);
   const prose = withoutFencedCode(body);
   if (/^#\s+/m.test(prose)) report(file, "body must not contain an H1; frontmatter title is the page H1");
+  if (/^#{2,4}\s+(?:[一二三四五六七八九十]+、|(?:\d+(?:\.\d+)*|[A-Z]\.\d+)\.?\s+)/m.test(prose)) {
+    report(file, "headings must not use manual section numbers");
+  }
+  if (/^(?:-{3,}|_{3,}|\*{3,})\s*$/m.test(prose)) report(file, "body must not use horizontal rules as section dividers");
   if (/^(?:```|~~~)mermaid\s*$/m.test(body)) report(file, "Mermaid fences are unsupported; publish a static SVG/PNG through Figure");
   if (/<!--[\s\S]*?-->/.test(body)) report(file, "raw HTML comments are invalid MDX; use an MDX comment");
   if (/\/Users\/[^/]+\//.test(body)) report(file, "article contains a personal macOS absolute path; replace it with a portable placeholder");

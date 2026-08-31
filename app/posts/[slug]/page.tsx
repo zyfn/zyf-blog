@@ -45,14 +45,13 @@ export default async function PostPage({ params }: PostPageProps) {
   return (
     <div className="site-shell" id="top">
       <SiteHeader active="articles" />
-      {toc.length ? <ArticleToc items={toc} /> : null}
       <main className="reader-page">
         <header className="post-hero page-frame">
+          <div className="post-utility">
+            <a className="back-link" href="/posts"><span aria-hidden="true">←</span> Back to Blog</a>
+            <time dateTime={post.updated.replaceAll(".", "-")}>Updated {post.updated}</time>
+          </div>
           <div className="post-heading">
-            <div className="post-utility">
-              <a className="back-link" href="/posts"><span aria-hidden="true">←</span> Back to Blog</a>
-              <time dateTime={post.updated.replaceAll(".", "-")}>Updated {post.updated}</time>
-            </div>
             <h1>{post.title}</h1>
             <p>{post.dek}</p>
             <div className="post-hero-meta">
@@ -62,6 +61,7 @@ export default async function PostPage({ params }: PostPageProps) {
         </header>
 
         <div className="page-frame article-layout">
+          {toc.length ? <ArticleToc items={toc} /> : null}
           <article className="article-content">
             <MdxArticle Content={post.Content} />
           </article>

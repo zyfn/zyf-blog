@@ -1,8 +1,8 @@
 ---
-title: 在意图与行动之间：一文看懂 Codex Harness
+title: 在意图与行动之间：Codex Harness 如何工作
 date: 2026-08-28
-lastmod: 2026-08-28
-summary: 从模型调用、工具执行到 Session 持久化，拆解 Codex Runtime 如何把一次请求推进为持续、受控且可恢复的行动。
+lastmod: 2026-08-31
+summary: 从模型调用、工具执行到 Session 持久化，解释 Codex Runtime 如何把一次请求推进为持续、受控且可恢复的行动。
 tags:
   - Codex
   - Agent Runtime
@@ -41,7 +41,11 @@ Codex 的 Harness 正是这样工作的。以“修复这个测试”为例，�
 
 图中，App Server 下方的 `Core Thread` 表示一个具体线程实例，内部的 `Codex Core` 承载 Agent Loop 及其运行支撑；中央的 `Agent Loop` 是 Harness 的核心逻辑。左侧决定 Agent 能做什么，右侧决定行动能否发生，底部保存行动结果并连接子线程。图中的 `Turn Orchestrator`、`Context Manager` 和 `Subagent Controller` 是对多个源码模块的职责归纳，不是源码中的同名单体组件；左侧层名是本文的解释性分组，App Server 内的四个组件对应官方架构描述。
 
-## 一、意图如何抵达现实：Harness 的全局图景
+<Callout title="版本边界">
+本文用 Codex Desktop `0.150.0-alpha.8` 的 Session 记录观察运行结果，并用 `rust-v0.147.0` 源码解释模块职责。两者不是同一版本，因此本文只把源码用于说明稳定关系；字段、路径和实验能力以文末基线及当前官方文档为准。
+</Callout>
+
+## Harness 如何把意图推进成行动
 
 OpenAI 在 [Harness 架构说明](https://openai.com/index/unlocking-the-codex-harness/) 中把 App Server 定义为长生命周期的 JSON-RPC 进程：它接收客户端请求、管理线程，并承载 Codex Core；Core Thread 才是实际运行一次 Agent 任务的对象。
 
@@ -86,7 +90,7 @@ Harness：把上下文、模型、工具和状态连成循环
 Context → Model → Tool Runtime → Tool Result → Context
 ```
 
-## 二、行动之前：Thread、Turn、Item 与 Context
+### Thread、Turn、Item 与 Context
 
 源码中的运行关系由四个对象组成：
 
@@ -99,7 +103,7 @@ Context：某次模型请求实际使用的输入集合
 
 `Thread` 是持久化边界，`Turn` 是执行边界，`Item` 是记录粒度，`Context` 是模型调用边界。一次执行就是它们依次产生和相互引用的过程。
 
-## 三、循环中的智能：一次 Turn 如何推进
+### 一次 Turn 如何推进
 
 普通任务开始时，Codex Core 创建活动 Turn。Turn 保存当前模型、权限、工作目录、工具配置和取消令牌，随后进入 `run_turn` 执行路径。
 
@@ -134,11 +138,11 @@ loop {
 
 OpenAI 对这个过程的描述也是同一个循环：Harness 把输入交给模型；模型返回最终回答或工具调用；Harness 执行工具并把结果追加回上下文；只要还有工具调用，就继续请求模型。[Unrolling the Codex agent loop](https://openai.com/index/unrolling-the-codex-agent-loop/)
 
-## 四、世界如何进入模型：上下文、规则与记忆
+## 上下文、能力与约束如何进入 Turn
 
 模型无法直接看到完整的工作区，也不会自动拥有所有历史。Harness 每次只构造一个服务于当前决策的暂时世界模型：它把规则、环境、历史、能力和限制组织成 Context，再交给模型。
 
-### 4.1 World State 不只是环境变量
+### World State 不只是环境变量
 
 `core/src/session/world_state.rs` 会按 Section 构造模型可见的动态上下文，源码中可以看到这些内容：
 
@@ -161,7 +165,7 @@ Multi-Agent Mode
 
 `AGENTS.md` 由 Agent MD 管理器从工作区和父目录发现，经过解析后成为 World State 的一部分。Skills、Plugins 和 Apps 也可能分别通过扩展注入或 World State 投影进入模型上下文。
 
-### 4.2 配置加载决定哪些能力可用
+### 配置加载决定哪些能力可用
 
 配置加载不止读取一个 `config.toml`。源码的 loader 会合并不同层级的配置，并根据项目可信度决定是否启用项目本地配置、Hooks 和 Exec Policy。配置还可以来自：
 
@@ -179,7 +183,7 @@ Thread 级 overrides
 
 Memory 是另一种上下文来源。它与 Thread 历史分属两套状态；`ext/memories/` 提供 list、read、search 和 write 能力，只有被读取或搜索的内容才会进入当前 Turn。
 
-### 4.3 上下文压缩与 Prompt Cache
+### 上下文压缩与 Prompt Cache
 
 长任务不可能无限追加历史。`turn.rs` 在采样前检查 token 状态；达到阈值时执行 pre-turn compact；Turn 内部如果上下文耗尽，则执行 mid-turn auto compact，然后继续模型/工具循环。
 
@@ -187,7 +191,7 @@ Memory 是另一种上下文来源。它与 Thread 历史分属两套状态；`e
 
 Prompt Cache 又要求已处理的历史前缀尽量稳定。Codex 把模型可见历史按追加方式维护，新消息、工具结果和环境更新追加到末尾，而不是修改旧前缀。这也是为什么“追加一条 Steer 输入”不会把之前的 Turn 过程改写成另一份历史。
 
-### 4.4 一次采样请求的最终输入
+### 一次采样请求的最终输入
 
 一次采样请求至少会受到下面几类内容影响：
 
@@ -214,7 +218,7 @@ sess.clone_history()
 
 “模型看到了什么”不能由用户消息或 Session 中第一条 developer message 单独决定。一次采样请求的输入，是历史筛选、环境渲染和工具定义合并后的结果。
 
-## 五、能力如何被召唤：Tools、MCP、Skills 与 Plugins
+### Tools、MCP、Skills 与 Plugins
 
 模型能完成什么，取决于当前 Turn 暴露了哪些能力。能力分成三个层次：Tool 提供一个动作，Skill 提供完成一类任务的方法，Plugin 则把多种能力组织成可分发的单元；MCP 让外部能力以统一协议进入这个系统。
 
@@ -232,7 +236,7 @@ Tool Registry / Router
 具体 Runtime 执行并返回结果
 ```
 
-### 5.1 内置工具：模型调用的统一入口
+#### 内置工具：模型调用的统一入口
 
 内置工具不只有 Shell 和 Apply Patch。`core/src/tools/handlers/` 中还包括：
 
@@ -252,7 +256,7 @@ code_mode                  批量执行代码模式任务
 
 `registry.rs` 负责工具注册，`router.rs` 根据模型返回的工具名分发到具体 Handler；`parallel.rs` 处理可以并行执行的工具调用；`lifecycle.rs` 负责工具项的开始、更新和完成状态。模型看到的是工具 schema，真正的执行由 Handler 和对应 Runtime 完成。
 
-### 5.2 MCP：把外部服务接入当前 Turn
+#### MCP：把外部服务接入当前 Turn
 
 MCP 在 Codex 中有独立运行时。一个远程函数要进入工具列表，先要经过配置、连接和目录发现：
 
@@ -289,7 +293,7 @@ Tool Approval       → 进入 Codex 审批链路
 
 因此一次 MCP 调用可能暂停 Turn，等待 OAuth、审批或 Elicitation 的客户端响应。
 
-### 5.3 Skill：渐进式注入的工作流说明
+#### Skill：渐进式注入的工作流说明
 
 Skill 是一种可发现、可加载、可注入的工作流包，通常由 `SKILL.md`、资源和脚本组成。它提供使用工具的说明，而不是工具本身或一段固定的系统提示词。
 
@@ -312,7 +316,7 @@ Skill 还可以声明工具依赖。`turn.rs` 从 Skill 内容和 metadata 中�
 
 App Server 文档推荐客户端在 `turn/start` 中同时传入文本和 `skill` input item。只在文本中写 `$skill-name` 也能工作，但会把 Skill 定位和读取工作交给模型，增加延迟和不确定性。
 
-### 5.4 Plugin、App 和 Connector：能力的打包层
+#### Plugin、App 和 Connector：能力的打包层
 
 Plugin 是能力的分发和装配单位。当前 Plugin manifest 可以声明：
 
@@ -336,11 +340,11 @@ MCP：能力发现与调用协议
 Skill：指导模型如何使用这些能力的工作流说明
 ```
 
-## 六、行动的边界：Hooks、Approval、Sandbox 与权限
+### Hooks、Approval、Sandbox 与权限
 
 能力进入模型之后，工具还要经过生命周期拦截、权限判断和执行隔离。这里决定的是一次行动能否发生，以及发生后如何被记录。
 
-### 6.1 Hook：在生命周期边界插入外部逻辑
+#### Hook：在生命周期边界插入外部逻辑
 
 Hook 由独立的 Hook Engine 发现、匹配并运行外部命令。`core/src/hook_runtime.rs` 负责把 Session、Turn、工具调用和压缩生命周期转换为 Hook Request，并消费 Hook Outcome。
 
@@ -365,7 +369,7 @@ SessionEnd / SubagentStart / SubagentStop
 
 Hook 的输出包含 `additional_contexts`、`updated_input`、`should_block` 和 `should_stop` 等结果；额外上下文会被转换成 ResponseItem，阻断结果会改变当前 Turn 的控制流。它不是单纯日志。
 
-### 6.2 Approval、Exec Policy 与 Sandbox
+#### Approval、Exec Policy 与 Sandbox
 
 工具调用从模型到外部世界之间经过三层控制：
 
@@ -379,15 +383,15 @@ App Server 的审批是双向协议：Server 先发起 `item/commandExecution/re
 
 `execpolicy` 负责命令规则和批准前缀；`sandboxing`、`tools/sandboxing.rs` 和环境管理器负责文件系统、网络和执行环境；Guardian/auto review 可以作为审批审查者参与高风险动作。审批通过也不等于业务结果正确，只表示该动作被允许运行。
 
-### 6.3 Auth 与后台资源
+#### Auth 与后台资源
 
 认证属于独立控制面，不进入模型上下文。模型/API Key、ChatGPT 登录凭证和 MCP Server OAuth 由认证模块和 App Server auth endpoints 管理；MCP OAuth 过期时，MCP Runtime 可能把 Server 标记为需要重新认证，凭证不会写进 `response_item`。
 
 后台终端、独立进程、Realtime 和 Code Mode 是执行资源的其他形态：它们可能跨越一次模型采样继续存在，但仍由当前 Thread 的生命周期、取消令牌和权限策略管理。
 
-## 七、一个 Agent 如何变成一群 Agent：Subagent 与 App Server
+## 多 Agent 与 App Server 如何扩展运行边界
 
-### 7.1 子 Agent：Tool 调用扩展成 Thread 图
+### 子 Agent：Tool 调用扩展成 Thread 图
 
 多 Agent 通过工具创建或操作子 Thread，而不是在当前模型请求里启动匿名函数。现有 Handler 包括：
 
@@ -412,7 +416,7 @@ close_agent
        └── close_agent → 关闭子 Thread 及其后代
 ```
 
-### 7.2 App Server：把 Runtime 变成可驱动的协议
+### App Server：把 Runtime 变成可驱动的协议
 
 App Server 是一个长生命周期、双向通信的 JSON-RPC 进程；在 stdio 传输上，消息以 JSONL 逐行传递，客户端收到的不只是最终文本。
 
@@ -446,7 +450,7 @@ item/started
 
 这就是 UI 能够边生成边渲染，同时在完成时拿到权威状态的原因。`turn/completed` 只提供最终消息摘要，完整过程要依靠 Item 事件。
 
-## 八、时间留下的痕迹：Session、Event 与 SQLite
+## 状态如何被记录、改变与恢复
 
 本文使用的本地样本来自一次 Codex Desktop Session：
 
@@ -501,7 +505,7 @@ compacted       1
 
 同一条任务因此同时拥有两条轨迹：`response_item` 记录模型历史，`event_msg` 记录运行观察；`world_state` 和 `turn_context` 则为后续 Context 重建提供状态。
 
-### 8.1 `session_meta`：这条会话从什么环境开始
+### `session_meta`：这条会话从什么环境开始
 
 真实样本的 `session_meta` 包含这些字段：
 
@@ -532,7 +536,7 @@ history_mode: paginated
 
 `base_instructions` 也在这里出现，但它只是基础指令的持久化来源。后续运行时还会根据客户端、工作区、权限、插件和当前环境构造更多上下文。
 
-### 8.2 `response_item`：模型历史里的内容
+### `response_item`：模型历史里的内容
 
 `ResponseItem` 定义在：
 
@@ -565,7 +569,7 @@ response_item(role=developer)
 
 JSONL 中不存在一条可以代表全部模型输入的“完整系统提示词”。Codex 的模型输入是运行时组装的消息序列。
 
-### 8.3 `event_msg`：告诉观察者发生了什么
+### `event_msg`：告诉观察者发生了什么
 
 `EventMsg` 的定义位于：
 
@@ -585,7 +589,7 @@ event_msg
 
 两者的边界在消费者：`event_msg` 描述“运行时发生了什么”，`response_item` 描述“会话历史中有哪些模型可消费的内容”。工具完成事件可以告诉 UI 工具已经结束；下一次模型请求仍要从 response item 读取工具结果。
 
-### 8.4 `world_state`：结构化的环境快照
+### `world_state`：结构化的环境快照
 
 当前样本第一次出现的 `world_state` 是一个完整快照：
 
@@ -617,7 +621,7 @@ codex-rs/core/src/session/mod.rs:2997
 codex-rs/core/src/session/mod.rs:3396
 ```
 
-### 8.5 `turn_context`：这一轮按什么条件执行
+### `turn_context`：这一轮按什么条件执行
 
 `turn_context` 保存的是当前 Turn 的执行契约，常见字段包括：
 
@@ -645,7 +649,7 @@ event_msg：运行过程中发生了什么
 
 它们都可能出现 `model`、权限或协作模式，所以文本上会重复；重复不代表职责相同。
 
-### 8.6 JSONL 之外的持久化投影
+### JSONL 之外的持久化投影
 
 Session JSONL 是 rollout 的追加记录，但客户端的列表、分页和状态查询还依赖 SQLite 投影：
 
@@ -667,9 +671,9 @@ state_*.sqlite
 
 排查“UI 显示和 session 不一致”时，需要区分三件事：rollout 是否写入、SQLite 投影是否追上、客户端是否加载了最新投影。
 
-## 九、在运行中改变方向：Steer、Interrupt 与 Queue
+### 在运行中改变方向：Steer、Interrupt 与 Queue
 
-### 9.1 Steer：给当前 Turn 增加待处理输入
+#### Steer：给当前 Turn 增加待处理输入
 
 源码中的 `steer_input` 位于：
 
@@ -708,7 +712,7 @@ input_queue.extend_pending_input_and_accept_mailbox_delivery_for_turn_state(
 
 没有活动 Turn 时，`steer_input` 返回 `NoActiveTurn`，不会创建新的普通 Turn。
 
-### 9.2 Interrupt：取消正在运行的任务
+#### Interrupt：取消正在运行的任务
 
 Interrupt 走的是另一条路径：
 
@@ -734,7 +738,7 @@ codex-rs/core/src/tasks/mod.rs:885
 
 源码还会在中断时写入 interrupted marker，并在发出 `TurnAborted` 前 flush rollout。这意味着 session 中可以看到“Turn 被中断”的持久化痕迹，而不是只在 UI 上消失。
 
-### 9.3 Queue：还没有进入当前 Turn 的输入
+#### Queue：还没有进入当前 Turn 的输入
 
 Queue 是另一层状态，保存在：
 
@@ -771,7 +775,7 @@ Steer：把输入投递进当前活动 Turn
 Interrupt：取消当前活动 Turn
 ```
 
-## 十、从记录回看行动：真实 Session 还原
+### 从记录回看行动：真实 Session 还原
 
 对这份 rollout 运行下面的命令，可以得到外层记录类型统计：
 
@@ -826,18 +830,19 @@ Interrupt 在 Session 中通常呈现为：
 
 最后还要检查工作区。Session 记录的是 Codex 认为发生过的运行事实，文件系统、Git diff、进程和测试结果才是外部世界的直接证据。
 
-## 十一、模型的边界，Harness 的责任
+## 模型停在哪里，Harness 负责什么
 
-前面的源码和本地记录共同指向两条边界：
+前面的源码和本地记录共同指向三个不同层次的事实：
 
 ```text
-模型边界：模型只产生决策，不直接修改工作区
-持久化边界：Session 记录过程，但不等于外部世界当前状态
+模型输出：描述下一步意图
+Runtime 事件：记录动作是否开始、完成或中断
+外部证据：证明工作区与业务结果现在是什么
 ```
 
-所以，Session 可以证明 Runtime 记录了哪些过程，不能单独证明工作区现在是什么；模型可以提出工具调用，不能单独证明工具已经产生了预期结果。最终事实仍要回到文件、Git diff、进程和测试。
+这三个层次不能互相替代。Session 可以证明 Runtime 记录了哪些过程，不能单独证明工作区现在是什么；模型可以提出工具调用，不能单独证明工具已经产生预期结果。文件、Git diff、进程、测试和业务验收，才是行动落到外部世界后的证据。
 
-## 参考源码与文档
+## 版本基线与参考资料
 
 - [Unlocking the Codex harness: how we built the App Server](https://openai.com/index/unlocking-the-codex-harness/)
 - [Unrolling the Codex agent loop](https://openai.com/index/unrolling-the-codex-agent-loop/)
@@ -861,4 +866,4 @@ Interrupt 在 Session 中通常呈现为：
 - `codex-rs/core/src/tasks/mod.rs:479`：`abort_all_tasks`
 - `codex-rs/state/src/runtime/queued_items.rs:21`：Queue 持久化
 
-本文本地验证使用 Codex Desktop 内置 `0.150.0-alpha.8`，源码 checkout 为 `rust-v0.147.0`。字段和控制流可能随版本变化；源码路径和本地 session 路径对应的是这次验证环境。
+以上源码路径对应 `rust-v0.147.0`，本地 Session 来自 Codex Desktop `0.150.0-alpha.8`。字段和实验控制流可能随版本变化，复现时应先记录当前版本并重新核对源码与 Schema。

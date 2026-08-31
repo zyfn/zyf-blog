@@ -8,21 +8,24 @@ export function ArticleToc({ items }: { items: TocItem[] }) {
     <aside
       aria-label="文章目录"
       className="article-toc"
-      data-open="false"
+      data-open="true"
+      suppressHydrationWarning
     >
       <button
-        aria-expanded="false"
-        aria-label="展开目录"
+        aria-controls="article-toc-body"
+        aria-expanded="true"
+        aria-label="收起目录"
         className="article-toc-header"
+        suppressHydrationWarning
         type="button"
       >
-        <span className="article-toc-title">Contents</span>
-        <span className="article-toc-grip" aria-hidden="true" />
+        <span className="article-toc-title">目录</span>
+        <span className="article-toc-caret" aria-hidden="true" />
       </button>
-      <div className="article-toc-body">
+      <div className="article-toc-body" id="article-toc-body">
         <nav>
           {items.map((item, index) => (
-            <a aria-current={index === 0 ? "location" : undefined} href={`#${item.id}`} key={item.id}>
+            <a aria-current={index === 0 ? "location" : undefined} href={`#${item.id}`} key={item.id} suppressHydrationWarning>
               {item.label}
             </a>
           ))}

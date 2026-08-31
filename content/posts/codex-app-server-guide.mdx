@@ -2,7 +2,7 @@
 title: 把 Codex 接进自己的产品：App Server 使用指南
 date: 2026-07-31
 lastmod: 2026-08-31
-summary: 从一次真实任务出发，理解 Codex App Server 的运行模型、完整命令面和生产客户端边界。
+summary: 从一条完整任务链路出发，理解 Codex App Server 的运行模型、命令面和生产客户端边界。
 tags:
   - Codex
   - App Server
@@ -325,6 +325,10 @@ const server = spawn("codex", ["app-server"], {
 const lines = readline.createInterface({ input: server.stdout });
 const pending = new Map();
 let nextId = 1;
+let resolveTurnDone;
+const turnDone = new Promise((resolve) => {
+  resolveTurnDone = resolve;
+});
 
 function send(message) {
   server.stdin.write(JSON.stringify(message) + "\n");
@@ -355,7 +359,7 @@ lines.on("line", (line) => {
   }
 
   if (message.method === "turn/completed") {
-    console.log("turn completed:", message.params.turn);
+    resolveTurnDone(message.params.turn);
   }
 });
 
@@ -373,13 +377,18 @@ const started = await request("thread/start", {
   cwd: process.cwd(),
 });
 
-await request("turn/start", {
+const turnStarted = await request("turn/start", {
   threadId: started.thread.id,
   input: [{ type: "text", text: "总结这个仓库的结构。" }],
 });
+
+console.log("turn started:", turnStarted.turn.id);
+const completedTurn = await turnDone;
+console.log("turn completed:", completedTurn.id, completedTurn.status);
+server.kill();
 ~~~
 
-这个例子仍然不是生产客户端。它没有处理超时、重连、取消、全部反向请求、事件归并和业务幂等，这些将在最后一章解决。
+这里刻意等待 `turn/completed`，因为 `turn/start` 的响应只证明 Turn 已建立。这个例子仍然不是生产客户端：它没有处理超时、重连、取消、全部反向请求、事件归并和业务幂等，这些将在最后一章解决。
 
 ## 命令完整指南
 

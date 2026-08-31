@@ -32,7 +32,6 @@ const themeInitializer = `
 const readingTraceInitializer = `
   (() => {
     let attempts = 0;
-    let floatingReady = false;
 
     const initializeReadingTrace = () => {
       const links = Array.from(document.querySelectorAll('.article-toc nav a[href^="#"]'));
@@ -43,99 +42,25 @@ const readingTraceInitializer = `
         }
         return;
       }
-      if (!("IntersectionObserver" in window)) return;
 
       const toc = document.querySelector('.article-toc');
       const handle = toc?.querySelector('.article-toc-header');
-      if (toc && handle && !floatingReady) {
-        floatingReady = true;
-        setTimeout(() => {
-          let dragging = false;
-          let moved = false;
-          let suppressClick = false;
-          let startX = 0;
-          let startY = 0;
-          let startLeft = 0;
-          let startTop = 0;
-
-        const place = (left, top) => {
-          const rect = toc.getBoundingClientRect();
-          const maxLeft = Math.max(12, innerWidth - rect.width - 12);
-          const maxTop = Math.max(12, innerHeight - rect.height - 12);
-          toc.style.left = Math.min(Math.max(12, left), maxLeft) + 'px';
-          toc.style.top = Math.min(Math.max(12, top), maxTop) + 'px';
-          toc.style.right = 'auto';
-          toc.style.bottom = 'auto';
-        };
-
-          try {
-            const saved = JSON.parse(localStorage.getItem('zyf-toc-position-v5') || 'null');
-            if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
-              place(saved.left, saved.top);
-            }
-          } catch {}
-
-        handle.addEventListener('pointerdown', (event) => {
-          if (event.button !== 0) return;
-          const rect = toc.getBoundingClientRect();
-          dragging = true;
-          moved = false;
-          startX = event.clientX;
-          startY = event.clientY;
-          startLeft = rect.left;
-          startTop = rect.top;
-          handle.setPointerCapture(event.pointerId);
-          toc.dataset.dragging = 'true';
-        });
-
-        window.addEventListener('pointermove', (event) => {
-          if (!dragging) return;
-          const deltaX = event.clientX - startX;
-          const deltaY = event.clientY - startY;
-          if (!moved && Math.hypot(deltaX, deltaY) < 4) return;
-          moved = true;
-          place(startLeft + deltaX, startTop + deltaY);
-        });
-
-        const finishDrag = (event) => {
-          if (!dragging) return;
-          dragging = false;
-          toc.dataset.dragging = 'false';
-          if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
-          if (!moved) return;
-          suppressClick = true;
-          setTimeout(() => { suppressClick = false; }, 250);
-          const rect = toc.getBoundingClientRect();
-          try {
-            localStorage.setItem('zyf-toc-position-v5', JSON.stringify({ left: rect.left, top: rect.top }));
-          } catch {}
-        };
-
-        window.addEventListener('pointerup', finishDrag);
-        window.addEventListener('pointercancel', finishDrag);
-        handle.addEventListener('click', (event) => {
-          if (suppressClick) {
-            event.preventDefault();
-            event.stopPropagation();
-            suppressClick = false;
-            return;
-          }
-          const open = toc.dataset.open !== 'true';
+      if (toc && handle) {
+        const setOpen = (open) => {
           toc.dataset.open = String(open);
           handle.setAttribute('aria-expanded', String(open));
           handle.setAttribute('aria-label', open ? '收起目录' : '展开目录');
-          if (!open) return;
-          setTimeout(() => {
-            const rect = toc.getBoundingClientRect();
-            place(rect.left, rect.top);
-          }, 340);
+        };
+
+        setOpen(!window.matchMedia('(max-width: 1120px)').matches);
+        toc.dataset.ready = 'true';
+        handle.addEventListener('click', (event) => {
+          event.preventDefault();
+          setOpen(toc.dataset.open !== 'true');
         });
-          window.addEventListener('resize', () => {
-            const rect = toc.getBoundingClientRect();
-            place(rect.left, rect.top);
-          });
-        }, 600);
       }
+
+      if (!("IntersectionObserver" in window)) return;
 
       const normalizedId = (value) => {
         const id = value.replace(/^#/, '');
@@ -147,6 +72,8 @@ const readingTraceInitializer = `
         .map((link) => document.getElementById(normalizedId(link.hash)))
         .filter(Boolean);
 
+      let lockedId = '';
+
       const setCurrent = (id) => {
         const currentId = normalizedId(id);
         links.forEach((link) => {
@@ -156,6 +83,11 @@ const readingTraceInitializer = `
       };
 
       const updateFromPosition = () => {
+        if (lockedId) {
+          setCurrent(lockedId);
+          return;
+        }
+
         const threshold = innerHeight * 0.28;
         let current = sections[0];
         for (const section of sections) {
@@ -165,23 +97,53 @@ const readingTraceInitializer = `
         if (current) setCurrent(current.id);
       };
 
-      const observer = new IntersectionObserver((entries) => {
-        const current = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((left, right) => left.boundingClientRect.top - right.boundingClientRect.top)[0];
-        if (current) setCurrent(current.target.id);
-        else updateFromPosition();
-      }, { rootMargin: '-18% 0px -68% 0px', threshold: 0 });
+      let scrollUpdatePending = false;
+      const updateOnScroll = () => {
+        if (scrollUpdatePending) return;
+        scrollUpdatePending = true;
+        requestAnimationFrame(() => {
+          scrollUpdatePending = false;
+          updateFromPosition();
+        });
+      };
+
+      const releaseHashLock = () => {
+        if (!lockedId) return;
+        lockedId = '';
+        updateOnScroll();
+      };
+
+      const observer = new IntersectionObserver(updateFromPosition, {
+        rootMargin: '-18% 0px -68% 0px',
+        threshold: 0,
+      });
 
       sections.forEach((section) => observer.observe(section));
-      if (location.hash) setCurrent(location.hash.slice(1));
-      window.addEventListener('hashchange', () => setCurrent(location.hash.slice(1)));
+      links.forEach((link) => link.addEventListener('click', () => {
+        lockedId = normalizedId(link.hash);
+        setCurrent(lockedId);
+      }));
+      window.addEventListener('scroll', updateOnScroll, { passive: true });
+      window.addEventListener('wheel', releaseHashLock, { passive: true });
+      window.addEventListener('touchstart', releaseHashLock, { passive: true });
+      window.addEventListener('keydown', releaseHashLock);
+      window.addEventListener('pointerdown', (event) => {
+        if (!(event.target instanceof Element) || !event.target.closest('.article-toc')) releaseHashLock();
+      }, { passive: true });
+      if (location.hash) {
+        lockedId = normalizedId(location.hash);
+        setCurrent(lockedId);
+      }
+      window.addEventListener('hashchange', () => {
+        lockedId = normalizedId(location.hash);
+        setCurrent(lockedId);
+      });
     };
 
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initializeReadingTrace, { once: true });
+      document.addEventListener('DOMContentLoaded', () => setTimeout(initializeReadingTrace, 500), { once: true });
     } else {
-      initializeReadingTrace();
+      setTimeout(initializeReadingTrace, 500);
     }
   })();
 `;

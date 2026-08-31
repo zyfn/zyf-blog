@@ -105,7 +105,9 @@ Codex CLI 的官方定位是让 Agent 在终端中检查代码、修改文件、
 - 任务边界清楚，可异步交付；
 - 希望隔离本机或并行运行多个独立任务。
 
-Cloud environment 必须显式准备依赖、环境变量、网络和启动脚本。Setup 阶段与 Agent 阶段可以拥有不同网络策略；Secret 只在 Setup 阶段提供，不能假设运行中的 Agent 仍能读取。把任务发送到 Cloud 并不会自动复制本机的隐含前提。[Local environment](https://learn.chatgpt.com/docs/environments/local-environment) · [Cloud environment](https://learn.chatgpt.com/docs/environments/cloud-environment)
+Cloud environment 必须显式准备依赖、环境变量、网络和启动脚本。Setup 阶段与 Agent 阶段可能使用不同网络策略，Secret 也不能被假定为始终可读。
+
+把任务发送到 Cloud，并不会复制本机的隐含前提。迁移前应先把本机服务、私有依赖和凭证来源写成可重建条件。[Local environment](https://learn.chatgpt.com/docs/environments/local-environment) · [Cloud environment](https://learn.chatgpt.com/docs/environments/cloud-environment)
 
 #### Desktop 适合监督，CLI 适合贴近 Shell
 
@@ -197,7 +199,9 @@ inherit = "core"
 
 这不是万能模板。字段、枚举和层级应以当前 [Configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference) 为准。团队更适合维护几套窄 Profile：本地开发、只读 Review、无人交互 CI，而不是一份同时满足所有任务的高权限配置。
 
-配置优先级从高到低依次是：CLI 参数与 `--config`、可信项目中的逐层 `.codex/config.toml`、`--profile`、用户配置、系统配置和内置默认值。不可信项目不会加载项目级 Config、Hook 与 Rule；组织的 `requirements.toml` 是约束用户可选范围的上限，不只是另一份默认配置。[Config basics](https://learn.chatgpt.com/docs/config-file/config-basic)
+配置会按 CLI 覆盖、可信项目配置、Profile、用户配置、系统配置和内置默认值逐层合并。不可信项目不会加载项目级 Config、Hook 与 Rule。
+
+组织的 `requirements.toml` 也不是另一份默认配置，而是用户可选范围的上限。排查“配置为什么没生效”时，要查看最终来源链，不能只检查一个文件。[Config basics](https://learn.chatgpt.com/docs/config-file/config-basic)
 
 ### Memory 与 Skill 的边界
 
@@ -214,9 +218,9 @@ Auto-review  ：当前尝试是否应被策略自动拦截
 Hook / Policy：固定事件和组织边界必须发生什么
 ```
 
-把 `danger-full-access` 与 `approval_policy = "never"` 同时启用，会同时拿掉系统隔离和交互闸门。它不是普通的“省事模式”，只应出现在调用者已经提供强隔离、无敏感凭证且可整体丢弃的环境中。[Approvals and security](https://learn.chatgpt.com/docs/agent-approvals-security) · [Sandboxing](https://learn.chatgpt.com/docs/sandboxing)
+把 `danger-full-access` 与 `approval_policy = "never"` 同时启用，会同时拿掉系统隔离和交互闸门。这种组合只适合调用者已经提供强隔离、没有敏感凭证且可以整体丢弃的环境；它不应成为日常开发的“省事模式”。[Approvals and security](https://learn.chatgpt.com/docs/agent-approvals-security) · [Sandboxing](https://learn.chatgpt.com/docs/sandboxing)
 
-Codex 还提供处于 Beta 的 Permission profiles，用细粒度文件系统和网络规则组合执行边界。它与传统 `sandbox_mode` 不是两层叠加：存在旧式 Sandbox 配置或显式 `--sandbox` 时，通常会回退到传统机制。迁移前应先确认实际生效的是哪套策略，而不是根据两个配置文件同时存在就推断“双重保护”。[Permissions](https://learn.chatgpt.com/docs/permissions)
+Permission profiles 用细粒度文件系统和网络规则组合执行边界，但它与传统 `sandbox_mode` 不是简单的两层叠加。迁移前应确认当前实际生效的是哪套策略；两个配置同时存在，并不能证明获得了“双重保护”。[Permissions](https://learn.chatgpt.com/docs/permissions)
 
 #### 从调查到执行逐步放权
 
@@ -287,7 +291,9 @@ Skill、Hook、Plugin、MCP 与项目脚本都可能改变 Agent 行为，部分
 | App / Connector | 用户显式附加的外部应用能力 | 利用已有账户上下文与数据 | 默认授予所有连接器访问 |
 | Plugin | 能力的安装、组合与分发单元 | 一起发布 Skill、MCP、Hook 和资源 | 把它误认为单一执行协议 |
 
-边界仍然要落到具体 Surface。Desktop、CLI 与 IDE 可以使用本机配置，Web / Cloud 不会自动继承本机 MCP；Hook 也只覆盖当前版本和 Surface 实际暴露的生命周期事件，不能假设所有托管工具与远程动作都会经过本地 Hook。Skill 脚本则继续受 Sandbox 与 Approval 控制。Hook 是确定性自动化和附加守卫，不是覆盖所有工具的安全边界。[MCP](https://learn.chatgpt.com/docs/extend/mcp) · [Hooks](https://learn.chatgpt.com/docs/hooks)
+扩展边界必须落到具体 Surface。Desktop、CLI 与 IDE 可以使用本机配置，Web / Cloud 不会自动继承本机 MCP；Hook 也只覆盖当前版本和 Surface 实际暴露的生命周期事件。
+
+因此，不能假设所有托管工具和远程动作都会经过本地 Hook。Hook 适合确定性自动化和附加守卫，不是覆盖所有工具的安全边界；Skill 脚本仍要经过 Sandbox 与 Approval。[MCP](https://learn.chatgpt.com/docs/extend/mcp) · [Hooks](https://learn.chatgpt.com/docs/hooks)
 
 ### 用介入点判断机制
 
@@ -365,7 +371,9 @@ Subagent 的价值不在“多一个模型”，而在独立上下文、明确�
 
 ### SDK：先分清它封装的是 CLI 还是 App Server
 
-TypeScript SDK 通过标准输入输出与本地 CLI 交换 JSONL；Python SDK 则控制本地 App Server。两者都便于在代码中启动、恢复和消费 Agent 任务，却不是一个免运维、远程托管的 Codex API。[Codex SDK](https://learn.chatgpt.com/docs/codex-sdk) · [TypeScript SDK source](https://github.com/openai/codex/tree/main/sdk/typescript) · [Python SDK source](https://github.com/openai/codex/tree/main/sdk/python)
+TypeScript SDK 通过标准输入输出与本地 CLI 交换 JSONL；Python SDK 控制本地 App Server。两者都便于在代码中启动、恢复和消费 Agent 任务，但都不是免运维的远程 Codex API。
+
+选择 SDK 前，先确认调用者需要的是一次执行、Thread 生命周期，还是完整客户端协议。[Codex SDK](https://learn.chatgpt.com/docs/codex-sdk) · [TypeScript SDK source](https://github.com/openai/codex/tree/main/sdk/typescript) · [Python SDK source](https://github.com/openai/codex/tree/main/sdk/python)
 
 平台仍需负责工作目录、资源限制、身份、凭证、持久状态、超时、重试、审计和人工接管。SDK 提供 Agent 能力，不自动提供生产可靠性。
 
@@ -423,7 +431,7 @@ App Server 负责完整客户端协议，服务层保存业务任务和验收状
 - Thread、工具、审批、外部副作用、成本和失败如何审计；
 - 自动化何时停止，谁负责接管。
 
-Managed configuration 和 requirements 的价值，是限制个人配置能够偏离的范围。Analytics 可以观察采用和用量趋势；Compliance / Audit 能力用于事件证据。它们都不能直接证明代码质量或工程生产力。[Governance](https://learn.chatgpt.com/docs/enterprise/governance) · [Managed configuration](https://learn.chatgpt.com/docs/enterprise/managed-configuration)
+Managed configuration 和 requirements 用来限制个人配置能够偏离的范围；Analytics、Compliance 和 Audit 则提供采用、用量和事件证据。它们能说明系统怎样被使用，不能直接证明代码质量或工程生产力。[Governance](https://learn.chatgpt.com/docs/enterprise/governance) · [Managed configuration](https://learn.chatgpt.com/docs/enterprise/managed-configuration)
 
 ### 自主性应与工程资产同步增长
 

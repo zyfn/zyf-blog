@@ -89,7 +89,9 @@ Claude Code 可以出现在 CLI、IDE、Desktop、Cloud、远程控制、CI 与 
 | `claude -p` / CI | 调用者提供的运行环境 | 一次性检查、批处理、结构化自动化 | 没有人回答临时审批 |
 | Agent SDK | 你设计和托管的应用环境 | 垂直 Agent、内部平台、多租户服务 | 基础设施和隔离责任转移给平台方 |
 
-最容易出错的是把 Cloud Session 与 Remote Control 当成同一件事。前者把执行搬到新的云端环境；后者只改变控制入口，执行和凭证仍留在原机器，连接期间 Transcript 会存储在 Anthropic 服务端。Self-hosted environment 又是第三种语义：执行进入组织基础设施，Anthropic 控制面和模型推理仍在外部。[Platforms](https://code.claude.com/docs/en/platforms) · [Claude Code on the web](https://code.claude.com/docs/en/claude-code-on-the-web) · [Remote Control](https://code.claude.com/docs/en/remote-control) · [Self-hosted environments](https://code.claude.com/docs/en/self-hosted-environments)
+Cloud Session、Remote Control 和 Self-hosted environment 很容易被混成一类。Cloud Session 把执行搬到新的云端环境；Remote Control 只改变控制入口，执行和凭证仍留在原机器；Self-hosted environment 则让执行进入组织基础设施，但控制面和模型推理仍在 Anthropic 一侧。
+
+三者改变的是不同所有权，不能只按“是否远程”分类。[Platforms](https://code.claude.com/docs/en/platforms) · [Claude Code on the web](https://code.claude.com/docs/en/claude-code-on-the-web) · [Remote Control](https://code.claude.com/docs/en/remote-control) · [Self-hosted environments](https://code.claude.com/docs/en/self-hosted-environments)
 
 Claude Code on the web、Remote Control 与 Self-hosted environment 的可用范围会随计划、组织策略和版本变化。这里不把某次发布状态外推为长期承诺；接入前应核对当前官方页面和组织设置。
 
@@ -159,7 +161,9 @@ Auto memory 适合保存调试结论和工作习惯，但它是机器本地资�
 确定性闸门：Hook / Managed policy / 外部审批
 ```
 
-行为指导告诉模型应该怎样工作；Permission 判断某次工具调用是否允许、询问或拒绝；Sandbox 在操作系统层限制 Bash 及其子进程；Hook 在固定事件发生时运行代码，可以补充上下文、校验或阻断动作。[Permissions](https://code.claude.com/docs/en/permissions) · [Sandboxing](https://code.claude.com/docs/en/sandboxing) · [Hooks](https://code.claude.com/docs/en/hooks)
+行为指导告诉模型应该怎样工作，Permission 决定某次工具调用是允许、询问还是拒绝。Sandbox 在操作系统层限制 Bash 及其子进程，Hook 则在固定事件上补充上下文、校验或阻断动作。
+
+这四层分别约束意图、工具决策、系统能力和生命周期，不能互相替代。[Permissions](https://code.claude.com/docs/en/permissions) · [Sandboxing](https://code.claude.com/docs/en/sandboxing) · [Hooks](https://code.claude.com/docs/en/hooks)
 
 这里有一个重要的安全边界：内置 Sandbox 主要覆盖 Bash 及其子进程，并不会自动包住 Read / Edit 工具、MCP Server 或 Hook。若目标是隔离整个 Agent 进程及其所有扩展，需要容器、VM 或官方单独提供的隔离运行环境，不能从“已开启 Sandbox”推导出“所有 I/O 都被 OS 隔离”。
 
@@ -260,7 +264,7 @@ Skill、Hook、MCP 和 Plugin 经常被放在同一张“高级能力”清单�
 | 向团队版本化分发整套能力 | Plugin | Skill、Agent、Hook、MCP 等怎样安装和升级 |
 | 在隔离上下文完成专业子任务 | Subagent | 谁在什么上下文和权限中工作 |
 
-Skill 的 `allowed-tools` 表达的是该 Skill 运行期间的临时预批准，并不是“该 Skill 只能使用这些工具”的限制名单。Skill 中的动态 Shell 预处理还会在内容进入模型前执行。设计 Skill 时仍要依赖 Permission、Sandbox 与可信代码审查建立边界，而不能把 Frontmatter 当安全沙箱。
+Skill 的 `allowed-tools` 表达临时预批准，并不是“该 Skill 只能使用这些工具”的限制名单。设计 Skill 时仍要依赖 Permission、Sandbox 和代码审查建立边界，不能把 Frontmatter 当成安全沙箱。
 
 ### 一个数据库变更助手应怎样分层
 
@@ -333,7 +337,9 @@ Skill 的 `allowed-tools` 表达的是该 Skill 运行期间的临时预批准�
 
 Dynamic workflow 把循环、分支、流水线和中间结果写成可读脚本，适合数十到数百个相似工作项：批量迁移、逐文件 Review、多来源研究、检查-修复-复查循环。
 
-在运行前仍要审查：输入发现范围、并发上限、失败传播、停止条件、权限和结果汇合方式。当前官方边界包括最多 16 个并发 Agent、一次运行最多 1,000 个 Agent；运行中不能像普通 Session 那样接收随意的用户输入，也不能跨 Claude Code 会话恢复。编排脚本可以重复一个好方法，也可以更快地重复一个坏方法。[Dynamic workflows](https://code.claude.com/docs/en/workflows)
+运行前仍要审查输入发现范围、并发上限、失败传播、停止条件、权限和结果汇合方式。具体数量会随版本变化，编排脚本也不能替代 Session 外的持久恢复。
+
+Workflow 可以重复一个好方法，也可以更快地重复一个坏方法；规模扩大前，先证明单个分片的输入、输出和失败语义稳定。[Dynamic workflows](https://code.claude.com/docs/en/workflows)
 
 ### 模型、计划与 Review：把高成本能力放在决策点
 
@@ -383,7 +389,9 @@ Headless 模式可以从 stdin 接收输入，并输出 text、JSON 或 stream-j
 
 ### Agent SDK 复用的是完整循环
 
-Agent SDK 不等于一次 Messages API 调用。它面向需要 Session、built-in tools、权限回调、Hook、Subagent、Skill、MCP、结构化结果、预算和观测的应用。Python 与 TypeScript SDK 会携带并固定兼容的 Claude Code CLI 版本，因此升级 SDK 也可能改变底层运行行为。[Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)
+Agent SDK 不等于一次 Messages API 调用。它把 Session、built-in tools、权限回调、Hook、Subagent、Skill 和 MCP 一起带进应用。
+
+Python 与 TypeScript SDK 会携带兼容的 Claude Code CLI 版本，因此升级 SDK 也可能改变底层运行行为。生产平台必须把这种变化纳入版本验证，而不是只看 SDK 的类型签名。[Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview)
 
 但 SDK 不会自动提供生产基础设施。会执行代码的多租户 Agent 仍需要容器或更强隔离、资源上限、短期凭证、持久 Session、网络策略、审计和人工接管。
 
@@ -440,7 +448,7 @@ Agent SDK 不等于一次 Messages API 调用。它面向需要 Session、built-
 - Session、工具、权限、成本、错误和外部副作用的审计；
 - 数据政策、ZDR、云端功能和第三方 Provider 之间的取舍。
 
-Managed policy 的价值是收窄用户可以选择的范围，而不只是提供默认值。OpenTelemetry 和 Analytics 可以告诉团队能力被怎样使用、哪里失败、成本如何变化，却不能单独证明生产力或代码质量。[Admin setup](https://code.claude.com/docs/en/admin-setup) · [Monitoring](https://code.claude.com/docs/en/monitoring-usage)
+Managed policy 用来收窄用户可以选择的范围，而不只是提供默认值。OpenTelemetry 和 Analytics 能说明能力怎样被使用、哪里失败、成本如何变化；这些数据不能单独证明生产力或代码质量。[Admin setup](https://code.claude.com/docs/en/admin-setup) · [Monitoring](https://code.claude.com/docs/en/monitoring-usage)
 
 ### 自主性应由资产支撑
 

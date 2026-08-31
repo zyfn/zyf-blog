@@ -15,7 +15,7 @@ draft: false
 
 如果你的程序只需要提交一次任务并等待结果，App Server 通常不是第一选择。用 `codex exec`，或者在代码里使用 Codex SDK，会更短、更直接。
 
-App Server 解决的是另一类问题：你正在做一个 IDE、桌面应用、内部研发平台或 Agent Team，需要长期持有多个 Codex 会话，持续接收执行事件，在正确的时刻展示 Diff、审批、用户输入和错误，并在进程或页面重启后恢复原来的工作。
+App Server 解决的是另一类问题：你的 IDE、桌面应用、内部研发平台或 Agent Team 需要长期持有多个 Codex 会话。它既要持续接收执行事件，也要在正确的时刻展示 Diff、审批、用户输入和错误，还要在进程或页面重启后恢复原来的工作。
 
 这时，真正困难的不是“怎样发送一段 Prompt”，而是怎样拥有一条可靠的 Agent 运行链路：
 
@@ -392,7 +392,7 @@ server.kill();
 
 ## 命令完整指南
 
-下面的命令表以本机 `codex-cli 0.149.0` 的 stable Schema 为准。“必填入参”只列 Schema 强制字段；空白不等于没有可选参数。“主要结果”是客户端最常用的响应内容，不替代生成的 JSON Schema。
+下面的命令表以本机 `codex-cli 0.149.0` 的 stable Schema 为准。“必填入参”只列 Schema 强制字段，空白不等于没有可选参数；“主要结果”只保留客户端最常用的响应内容。实现时仍应以当前版本生成的 JSON Schema 为准。
 
 ### 连接、Thread 与分组
 
@@ -824,4 +824,4 @@ clientUserMessageId / 幂等键
 - [OpenAI：Unlocking the Codex harness](https://openai.com/index/unlocking-the-codex-harness/)
 - [Codex App Server 开源实现](https://github.com/openai/codex/tree/main/codex-rs/app-server)
 
-App Server 最值得记住的不是某个方法名，而是所有权边界：Codex 拥有 Thread、Turn、Item 和执行事实；你的产品拥有用户、业务对象、验收状态和失败恢复策略。把这条边界分清，App Server 才会从“能调用”变成“能长期运行”。
+方法名会随版本增加，所有权边界更稳定：Codex 拥有 Thread、Turn、Item 和执行事实；你的产品拥有用户、业务对象、验收状态和失败恢复策略。只有把两边分清，App Server 才会从“能调用”变成“能长期运行”。

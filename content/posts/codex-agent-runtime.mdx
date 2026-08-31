@@ -39,7 +39,9 @@ Codex 的 Harness 正是这样工作的。以“修复这个测试”为例，�
   caption="App Server 承载长生命周期控制通道，Core Thread 中的 Agent Loop 连接上下文、工具、权限与持久化。"
 />
 
-图中，App Server 下方的 `Core Thread` 表示一个具体线程实例，内部的 `Codex Core` 承载 Agent Loop 及其运行支撑；中央的 `Agent Loop` 是 Harness 的核心逻辑。左侧决定 Agent 能做什么，右侧决定行动能否发生，底部保存行动结果并连接子线程。图中的 `Turn Orchestrator`、`Context Manager` 和 `Subagent Controller` 是对多个源码模块的职责归纳，不是源码中的同名单体组件；左侧层名是本文的解释性分组，App Server 内的四个组件对应官方架构描述。
+图中，App Server 下方的 `Core Thread` 表示一个具体线程实例，内部的 `Codex Core` 承载 Agent Loop 及其运行支撑。左侧决定 Agent 能做什么，右侧决定行动能否发生，底部保存行动结果并连接子线程。
+
+图里的 `Turn Orchestrator`、`Context Manager` 和 `Subagent Controller` 是对多个源码模块的职责归纳，并非源码中的同名单体组件。App Server 内的四个组件则对应官方架构描述。
 
 <Callout title="版本边界">
 本文用 Codex Desktop `0.150.0-alpha.8` 的 Session 记录观察运行结果，并用 `rust-v0.147.0` 源码解释模块职责。两者不是同一版本，因此本文只把源码用于说明稳定关系；字段、路径和实验能力以文末基线及当前官方文档为准。
@@ -72,7 +74,7 @@ App Server
               └─ Persistence / Compaction
 ```
 
-App Server 内部的四个组件由官方列为同层组件。从职责上看，`Stdio Reader` 和 `Message Processor` 处理协议读取与请求转换；`Thread Manager` 和 `Core Threads` 处理线程创建、管理以及 Codex Core 的运行承载。四者共同构成 App Server，但“协议处理”和“线程承载”并不是同一件事。
+官方把 App Server 内部拆成四个同层组件。`Stdio Reader` 和 `Message Processor` 负责读取协议并转换请求；`Thread Manager` 和 `Core Threads` 负责创建、管理和承载线程。这个拆分提醒客户端：协议连接正常，不等于线程本身运行正常。
 
 源码中，`Session` 保存一个线程的运行状态；`Turn` 表示一次正在执行的任务；`turn.rs` 中的循环负责不断准备上下文、调用模型和处理后续动作。App Server 对外暴露线程和轮次操作，例如 `thread/start`、`turn/start`、`turn/steer` 和 `turn/interrupt`，客户端通过这些操作驱动 Harness。
 
@@ -276,7 +278,7 @@ MCP Binding
 当前 Step 的模型可见工具
 ```
 
-`codex-mcp/src/connection_manager/` 管理 Server 的连接和启动；`codex-mcp/src/runtime.rs` 保存一个 Thread 的可变 MCP 状态，并通过原子替换发布新的运行快照；`core/src/session/mcp.rs` 把当前 Thread 的配置、环境、权限和所需 Server 组装成 MCP Runtime。
+MCP Connection Manager 负责 Server 的连接和启动；MCP Runtime 保存一个 Thread 的可变连接状态，并发布新的运行快照。Session 层再把当前 Thread 的配置、环境、权限和所需 Server 组装成这套 Runtime。对应源码路径统一列在文末，正文只保留职责关系。
 
 `turn.rs` 先根据用户输入、显式 Skill 和 Plugin 需求计算 `required_servers`，再捕获 Step Context；如果 MCP 状态发生变化，当前或下一次 Step 会刷新连接和工具目录。模型最终拿到的是本轮可用的 MCP Tool，而不是全部配置文件内容。
 
@@ -310,7 +312,7 @@ Skill 是一种可发现、可加载、可注入的工作流包，通常由 `SKI
   → 注入当前 Turn 的模型历史
 ```
 
-Skill Root 有不同 scope，插件 Skill 还需要校验路径位于 Plugin Root 内。`core-skills/src/loader.rs` 负责扫描、解析和合并；`core-skills/src/injection.rs` 的 `build_skill_injections` 读取 `SKILL.md`，生成带名称、路径和内容的注入项，并记录调用指标。
+Skill Root 有不同 scope，插件 Skill 还要校验路径是否位于 Plugin Root。Loader 负责扫描、解析和合并，Injection 层读取 `SKILL.md` 并生成进入当前 Turn 的注入项。这里的关键不是文件名，而是“先发现，再按需加载，最后进入模型历史”的顺序。
 
 Skill 还可以声明工具依赖。`turn.rs` 从 Skill 内容和 metadata 中提取 App/MCP 依赖，先准备能力，再把 Skill 指令注入模型上下文。显式调用发生在输入中出现 `$skill-name` 时；隐式调用则由命令和工作目录匹配触发。
 
@@ -329,7 +331,7 @@ commands
 interface
 ```
 
-`core-plugins/src/manifest.rs` 解析 manifest；`loader.rs` 根据 manifest 加载 Plugin Skill、MCP Server、App 和 Hook；`core/src/plugins/injection.rs` 把显式 Plugin mention 渲染成 developer/contextual input，提供当前 Plugin 的 MCP Server、App 和 Skill 前缀。
+Plugin Loader 根据 manifest 装配 Skill、MCP Server、App 和 Hook。显式提及 Plugin 时，Runtime 再把当前 Plugin 的能力边界注入上下文。Plugin 因而解决的是安装与组合，不是另一套工具调用协议。
 
 App 是通过 Connector 接入、带有连接器身份和 UI 资源的 MCP 能力。它既可能提供模型可调用的 Tool，也可能提供 Resource 或 widget 资源。Plugin、App 和 MCP 的关系可以写成：
 

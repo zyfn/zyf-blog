@@ -48,7 +48,10 @@ export default async function PostPage({ params }: PostPageProps) {
       <main className="reader-page">
         <header className="post-hero page-frame">
           <div className="post-utility">
-            <a className="back-link" href="/posts"><span aria-hidden="true">←</span> Back to Blog</a>
+            <a className="back-link" href="/posts">
+              <span className="back-link-icon" aria-hidden="true">←</span>
+              <span>Back to Blog</span>
+            </a>
             <time dateTime={post.updated.replaceAll(".", "-")}>Updated {post.updated}</time>
           </div>
           <div className="post-heading">

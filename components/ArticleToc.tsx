@@ -31,8 +31,8 @@ export function ArticleToc({ items }: { items: TocItem[] }) {
           ))}
         </nav>
         <a className="article-toc-top" href="#top">
-          <span>Back to top</span>
-          <span aria-hidden="true">↑</span>
+          <span>返回顶部</span>
+          <span className="article-toc-top-icon" aria-hidden="true">↑</span>
         </a>
       </div>
     </aside>

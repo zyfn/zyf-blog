@@ -28,7 +28,7 @@
   --press-shadow: 0 14px 34px rgb(56 65 79 / 13%), 0 0 0 1px rgb(56 65 79 / 7%), inset 0 1px 0 var(--glass-highlight), inset 0 -1px 0 rgb(56 65 79 / 6%);
   --ambient-warm: rgb(230 93 67 / 8%);
   --ambient-cool: rgb(111 135 174 / 8%);
-  --article-column: min(60vw, 1040px);
+  --article-column: min(55vw, 960px);
   --background-start: #f8f9fb;
   --background-middle: #f3f5f8;
   --background-end: #edf0f4;
@@ -405,6 +405,7 @@ img {
   .about-person,
   .back-link,
   .post-hero-meta span,
+  .article-toc-top,
   .article-toc,
   .mdx-callout {
     background: var(--background);
@@ -423,6 +424,7 @@ img {
   .post-search input,
   .about-person,
   .back-link,
+  .article-toc-top,
   .article-toc {
     border-color: var(--line-strong);
   }

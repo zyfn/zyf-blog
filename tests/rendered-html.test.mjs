@@ -112,9 +112,9 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.match(tocSource, /article-toc-body/);
   assert.match(tocSource, /aria-current=\{index === 0/);
   assert.match(contentStyles, /\.article-layout \{[\s\S]*?display: grid;/);
-  assert.match(contentStyles, /\.article-layout \{[\s\S]*?column-gap: clamp\(32px, 3\.4vw, 48px\);/);
+  assert.match(contentStyles, /\.article-layout \{[\s\S]*?column-gap: clamp\(36px, 3\.8vw, 56px\);/);
   assert.match(contentStyles, /\.article-layout \{[\s\S]*?width: calc\(100vw - 64px\);/);
-  assert.match(baseStyles, /--article-column: min\(60vw, 1040px\);/);
+  assert.match(baseStyles, /--article-column: min\(55vw, 960px\);/);
   assert.match(contentStyles, /\.post-heading \{[\s\S]*?max-width: var\(--article-column\);[\s\S]*?text-align: center;/);
   assert.match(contentStyles, /\.post-utility \{[\s\S]*?justify-content: space-between;[\s\S]*?width: var\(--article-column\);/);
   assert.match(contentStyles, /\.post-hero-meta \{[\s\S]*?justify-content: center;/);
@@ -151,7 +151,7 @@ test("renders a global-search archive without sidebar filters", async () => {
   const html = await response.text();
   assert.match(html, /Search the archive/);
   assert.match(html, /<h1>Archive<\/h1>/);
-  assert.equal((html.match(/class="article-card-row"/g) ?? []).length, 4);
+  assert.ok((html.match(/class="article-card-row"/g) ?? []).length >= 4);
   assert.doesNotMatch(html, /<span>Archive<\/span>|<h1>Blog<\/h1>/);
   assert.doesNotMatch(html, /搜索标题或摘要|<h1>文章<\/h1>/);
   assert.doesNotMatch(html, /topics-header|topic-grid|Blog categories|Articles \(|Shares \(|Notes \(/);

@@ -121,12 +121,12 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.match(contentStyles, /\.post-utility \{[\s\S]*?justify-content: space-between;[\s\S]*?width: var\(--article-column\);/);
   assert.match(contentStyles, /\.post-hero-meta \{[\s\S]*?justify-content: center;/);
   assert.match(contentStyles, /\.article-content \{[\s\S]*?max-width: var\(--article-column\);/);
-  assert.match(contentStyles, /\.article-toc-title \{[\s\S]*?font-size: 0\.99rem;[\s\S]*?font-weight: 640;/);
-  assert.match(contentStyles, /\.article-toc nav a \{[\s\S]*?font-size: 0\.97rem;[\s\S]*?font-weight: 560;/);
+  assert.match(contentStyles, /\.article-toc-title \{[\s\S]*?font-size: 0\.81rem;[\s\S]*?font-weight: 640;/);
+  assert.match(contentStyles, /\.article-toc nav a \{[\s\S]*?font-size: 0\.79rem;[\s\S]*?font-weight: 560;/);
   assert.match(contentStyles, /\.article-toc \{[\s\S]*?max-width: 240px;/);
   assert.match(contentStyles, /\.article-content \{[\s\S]*?grid-column: 2;/);
-  assert.match(contentStyles, /\.post-hero h1 \{[\s\S]*?font-size: clamp\(2\.4rem, 3\.5vw, 3\.3rem\);[\s\S]*?font-weight: 540;/);
-  assert.match(contentStyles, /\.article-prose \{[\s\S]*?font-size: 1\.13rem;[\s\S]*?line-height: 1\.72;/);
+  assert.match(contentStyles, /\.post-hero h1 \{[\s\S]*?font-size: clamp\(2rem, 2\.9vw, 2\.7rem\);[\s\S]*?font-weight: 540;/);
+  assert.match(contentStyles, /\.article-prose \{[\s\S]*?font-size: 0\.93rem;[\s\S]*?line-height: 1\.72;/);
   assert.doesNotMatch(contentStyles.match(/\.article-layout \{[\s\S]*?\n\}/)?.[0] ?? "", /border-top/);
   assert.doesNotMatch(contentStyles.match(/\.article-prose h2 \{[\s\S]*?\n\}/)?.[0] ?? "", /border-top|padding-top/);
   assert.match(contentStyles, /\.article-prose hr \{[\s\S]*?display: none;/);

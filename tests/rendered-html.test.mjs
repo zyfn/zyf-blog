@@ -68,6 +68,8 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.match(homeSource, /slice\(0, 3\)/);
   assert.match(homeSource, /<ArticleCard/);
   assert.match(explorerSource, /<ArticleCard/);
+  assert.match(cardSource, /article\.published/);
+  assert.doesNotMatch(cardSource, /article\.updated/);
   assert.match(cardSource, /article-card-tags/);
   assert.match(cardSource, /article-card-arrow/);
   assert.match(cardSource, /article-card-trace/);
@@ -119,12 +121,12 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.match(contentStyles, /\.post-utility \{[\s\S]*?justify-content: space-between;[\s\S]*?width: var\(--article-column\);/);
   assert.match(contentStyles, /\.post-hero-meta \{[\s\S]*?justify-content: center;/);
   assert.match(contentStyles, /\.article-content \{[\s\S]*?max-width: var\(--article-column\);/);
-  assert.match(contentStyles, /\.article-toc-title \{[\s\S]*?font-size: 0\.9rem;[\s\S]*?font-weight: 640;/);
-  assert.match(contentStyles, /\.article-toc nav a \{[\s\S]*?font-size: 0\.88rem;[\s\S]*?font-weight: 560;/);
+  assert.match(contentStyles, /\.article-toc-title \{[\s\S]*?font-size: 0\.99rem;[\s\S]*?font-weight: 640;/);
+  assert.match(contentStyles, /\.article-toc nav a \{[\s\S]*?font-size: 0\.97rem;[\s\S]*?font-weight: 560;/);
   assert.match(contentStyles, /\.article-toc \{[\s\S]*?max-width: 240px;/);
   assert.match(contentStyles, /\.article-content \{[\s\S]*?grid-column: 2;/);
-  assert.match(contentStyles, /\.post-hero h1 \{[\s\S]*?font-size: clamp\(2\.2rem, 3\.2vw, 3rem\);[\s\S]*?font-weight: 540;/);
-  assert.match(contentStyles, /\.article-prose \{[\s\S]*?font-size: 1\.03rem;[\s\S]*?line-height: 1\.72;/);
+  assert.match(contentStyles, /\.post-hero h1 \{[\s\S]*?font-size: clamp\(2\.4rem, 3\.5vw, 3\.3rem\);[\s\S]*?font-weight: 540;/);
+  assert.match(contentStyles, /\.article-prose \{[\s\S]*?font-size: 1\.13rem;[\s\S]*?line-height: 1\.72;/);
   assert.doesNotMatch(contentStyles.match(/\.article-layout \{[\s\S]*?\n\}/)?.[0] ?? "", /border-top/);
   assert.doesNotMatch(contentStyles.match(/\.article-prose h2 \{[\s\S]*?\n\}/)?.[0] ?? "", /border-top|padding-top/);
   assert.match(contentStyles, /\.article-prose hr \{[\s\S]*?display: none;/);
@@ -132,6 +134,7 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.doesNotMatch(postPageSource, /<span>ZYF<\/span>/);
   assert.doesNotMatch(postPageSource, /post-byline/);
   assert.match(postPageSource, /post-utility/);
+  assert.match(postPageSource, /post\.updated/);
   assert.ok(postPageSource.indexOf('className="post-utility"') < postPageSource.indexOf('className="post-heading"'));
   assert.ok(postPageSource.indexOf('<ArticleToc items={toc}') > postPageSource.indexOf('className="page-frame article-layout"'));
   assert.ok(postPageSource.indexOf('<ArticleToc items={toc}') < postPageSource.indexOf('className="article-content"'));
@@ -149,9 +152,15 @@ test("renders a global-search archive without sidebar filters", async () => {
   const response = await render("/posts");
   assert.equal(response.status, 200);
   const html = await response.text();
+  const cards = [...html.matchAll(/href="\/posts\/([^"]+)"[^>]*><time class="article-card-meta" dateTime="([^"]+)"/g)]
+    .map(([, slug, date]) => ({ slug, date }));
+  const cardTimestamps = cards.map(({ date }) => Date.parse(`${date}T00:00:00Z`));
   assert.match(html, /Search the archive/);
   assert.match(html, /<h1>Archive<\/h1>/);
   assert.ok((html.match(/class="article-card-row"/g) ?? []).length >= 4);
+  assert.deepEqual(cardTimestamps, [...cardTimestamps].sort((left, right) => right - left));
+  assert.equal(cards.find(({ slug }) => slug === "codex-agent-runtime")?.date, "2026-08-28");
+  assert.equal(cards.find(({ slug }) => slug === "codex-app-server-guide")?.date, "2026-07-31");
   assert.doesNotMatch(html, /<span>Archive<\/span>|<h1>Blog<\/h1>/);
   assert.doesNotMatch(html, /搜索标题或摘要|<h1>文章<\/h1>/);
   assert.doesNotMatch(html, /topics-header|topic-grid|Blog categories|Articles \(|Shares \(|Notes \(/);

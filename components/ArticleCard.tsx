@@ -11,8 +11,8 @@ export function ArticleCard({ article, headingLevel = "h3" }: ArticleCardProps) 
   return (
     <article className="article-card-row">
       <a className="article-card-link" href={`/posts/${article.slug}`}>
-        <time className="article-card-meta" dateTime={article.updated.replaceAll(".", "-")}>
-          {article.updated}
+        <time className="article-card-meta" dateTime={article.published.replaceAll(".", "-")}>
+          {article.published}
         </time>
         <span className="article-card-trace" aria-hidden="true" />
         <div className="article-card-copy">

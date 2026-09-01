@@ -5,6 +5,7 @@ export type Article = {
   title: string;
   dek: string;
   tags: string[];
+  published: string;
   updated: string;
   coverImage: string;
   createdAt: number;

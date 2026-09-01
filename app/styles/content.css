@@ -296,7 +296,7 @@
   display: flex;
   flex-wrap: wrap;
   font-family: var(--mono);
-  font-size: 0.82rem;
+  font-size: 0.9rem;
   font-variant-numeric: tabular-nums;
   gap: 10px 24px;
   justify-content: space-between;
@@ -311,7 +311,7 @@
   color: var(--topic);
   display: inline-flex;
   font-family: var(--sans);
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 580;
   gap: 9px;
   min-height: 36px;
@@ -324,7 +324,7 @@
   color: var(--topic);
   display: inline-flex;
   flex: 0 0 auto;
-  font-size: 1.08rem;
+  font-size: 1.18rem;
   justify-content: center;
   transition: color 240ms var(--ease-fluid), transform 240ms var(--ease-fluid);
 }
@@ -354,7 +354,7 @@
 .post-hero-meta span {
   color: var(--topic);
   font-family: var(--sans);
-  font-size: 0.96rem;
+  font-size: 1.05rem;
   font-weight: 620;
   letter-spacing: 0.005em;
   line-height: 1.35;
@@ -365,7 +365,7 @@
 }
 
 .post-hero h1 {
-  font-size: clamp(2.2rem, 3.2vw, 3rem);
+  font-size: clamp(2.4rem, 3.5vw, 3.3rem);
   font-weight: 540;
   letter-spacing: -0.045em;
   line-height: 1.08;
@@ -375,7 +375,7 @@
 
 .post-heading > p {
   color: var(--text-muted);
-  font-size: clamp(1rem, 1.15vw, 1.125rem);
+  font-size: clamp(1.08rem, 1.25vw, 1.24rem);
   font-weight: 400;
   line-height: 1.58;
   margin: 20px auto 0;
@@ -443,7 +443,7 @@
 .article-toc-title {
   color: var(--text-muted);
   display: block;
-  font-size: 0.9rem;
+  font-size: 0.99rem;
   font-weight: 640;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -497,7 +497,7 @@
 .article-toc nav a {
   border-left: 2px solid transparent;
   color: var(--text-muted);
-  font-size: 0.88rem;
+  font-size: 0.97rem;
   font-weight: 560;
   line-height: 1.45;
   padding: 6px 4px 6px 11px;
@@ -523,7 +523,7 @@
   display: inline-flex;
   flex: 0 0 auto;
   font-family: var(--sans);
-  font-size: 0.9rem;
+  font-size: 0.99rem;
   font-weight: 570;
   gap: 9px;
   justify-content: flex-start;
@@ -537,7 +537,7 @@
   align-items: center;
   color: var(--topic);
   display: inline-flex;
-  font-size: 0.98rem;
+  font-size: 1.08rem;
   justify-content: center;
   transition: color 220ms var(--ease-fluid), transform 220ms var(--ease-fluid);
 }
@@ -584,7 +584,7 @@
 
 .article-prose {
   color: var(--text-soft);
-  font-size: 1.03rem;
+  font-size: 1.13rem;
   line-height: 1.72;
   max-width: none;
   width: 100%;
@@ -606,17 +606,17 @@
 }
 
 .article-prose h2 {
-  font-size: clamp(1.75rem, 2.4vw, 2rem);
+  font-size: clamp(1.9rem, 2.6vw, 2.2rem);
   margin: 3.7rem 0 1.1rem;
 }
 
 .article-prose h3 {
-  font-size: clamp(1.28rem, 1.8vw, 1.45rem);
+  font-size: clamp(1.4rem, 2vw, 1.6rem);
   margin: 2.45rem 0 0.9rem;
 }
 
 .article-prose h4 {
-  font-size: 1.08rem;
+  font-size: 1.19rem;
   margin: 2rem 0 0.8rem;
 }
 
@@ -667,7 +667,7 @@
 
 .article-prose pre code {
   font-family: inherit;
-  font-size: 0.86rem;
+  font-size: 0.95rem;
 }
 
 .article-prose blockquote {
@@ -693,7 +693,7 @@
 
 .mdx-figure figcaption {
   color: var(--text-muted);
-  font-size: 0.86rem;
+  font-size: 0.95rem;
   line-height: 1.55;
   margin: 0.8rem auto 0;
   max-width: 68ch;
@@ -896,7 +896,7 @@
   }
 
   .post-hero h1 {
-    font-size: 2.05rem;
+    font-size: 2.25rem;
   }
 
   .post-utility {
@@ -909,10 +909,10 @@
   }
 
   .article-prose {
-    font-size: 1rem;
+    font-size: 1.1rem;
   }
 
   .article-prose h2 {
-    font-size: 1.65rem;
+    font-size: 1.8rem;
   }
 }

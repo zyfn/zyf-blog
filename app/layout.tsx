@@ -33,9 +33,82 @@ const readingTraceInitializer = `
   (() => {
     let attempts = 0;
 
+    const normalizedId = (value) => {
+      const id = String(value).replace(/^#/, '');
+      try { return decodeURIComponent(id); }
+      catch { return id; }
+    };
+
+    const tocLinks = () => Array.from(document.querySelectorAll('.article-toc nav a[href^="#"]'));
+
+    const groupLabel = (wrapper) => {
+      const head = wrapper.querySelector('a[data-depth="2"]');
+      return head ? head.textContent.trim() : '';
+    };
+
+    const expandGroupOf = (link) => {
+      const wrapper = link.closest('.article-toc-group');
+      const caret = wrapper && wrapper.querySelector('.article-toc-group-caret');
+      if (wrapper && caret && wrapper.dataset.collapsed === 'true') {
+        wrapper.dataset.collapsed = 'false';
+        caret.setAttribute('aria-expanded', 'true');
+        caret.setAttribute('aria-label', '收起「' + groupLabel(wrapper) + '」小节');
+      }
+    };
+
+    let lockedId = '';
+
+    const setCurrent = (hash) => {
+      const currentId = normalizedId(hash);
+      tocLinks().forEach((link) => {
+        const isCurrent = normalizedId(link.getAttribute('href')) === currentId;
+        if (isCurrent) {
+          link.setAttribute('aria-current', 'location');
+          expandGroupOf(link);
+        } else {
+          link.removeAttribute('aria-current');
+        }
+      });
+    };
+
+    document.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const caret = target.closest('.article-toc-group-caret');
+      if (caret) {
+        const wrapper = caret.closest('.article-toc-group');
+        if (!wrapper) return;
+        const open = wrapper.dataset.collapsed === 'true';
+        wrapper.dataset.collapsed = String(!open);
+        caret.setAttribute('aria-expanded', String(open));
+        caret.setAttribute('aria-label', (open ? '收起' : '展开') + '「' + groupLabel(wrapper) + '」小节');
+        return;
+      }
+
+      const header = target.closest('.article-toc-header');
+      if (header) {
+        const toc = header.closest('.article-toc');
+        if (toc) {
+          const open = toc.dataset.open !== 'true';
+          toc.dataset.open = String(open);
+          header.setAttribute('aria-expanded', String(open));
+          header.setAttribute('aria-label', open ? '收起目录' : '展开目录');
+        }
+        return;
+      }
+
+      const link = target.closest('.article-toc nav a[href^="#"]');
+      if (link) {
+        lockedId = normalizedId(link.getAttribute('href'));
+        setCurrent(link.getAttribute('href'));
+      }
+    });
+
     const initializeReadingTrace = () => {
-      const links = Array.from(document.querySelectorAll('.article-toc nav a[href^="#"]'));
-      if (!links.length) {
+      const toc = document.querySelector('.article-toc');
+      const handle = toc?.querySelector('.article-toc-header');
+      if (!toc || !handle) {
         if (/^\\/posts\\/[^/]+/.test(location.pathname) && attempts < 20) {
           attempts += 1;
           setTimeout(initializeReadingTrace, 100);
@@ -43,59 +116,20 @@ const readingTraceInitializer = `
         return;
       }
 
-      const toc = document.querySelector('.article-toc');
-      const handle = toc?.querySelector('.article-toc-header');
-      if (toc && handle) {
-        const setOpen = (open) => {
-          toc.dataset.open = String(open);
-          handle.setAttribute('aria-expanded', String(open));
-          handle.setAttribute('aria-label', open ? '收起目录' : '展开目录');
-        };
+      const setOpen = (open) => {
+        toc.dataset.open = String(open);
+        handle.setAttribute('aria-expanded', String(open));
+        handle.setAttribute('aria-label', open ? '收起目录' : '展开目录');
+      };
 
+      if (!toc.dataset.ready) {
         setOpen(!window.matchMedia('(max-width: 1120px)').matches);
         toc.dataset.ready = 'true';
-        handle.addEventListener('click', (event) => {
-          event.preventDefault();
-          setOpen(toc.dataset.open !== 'true');
-        });
       }
 
       if (!("IntersectionObserver" in window)) return;
-
-      const normalizedId = (value) => {
-        const id = value.replace(/^#/, '');
-        try { return decodeURIComponent(id); }
-        catch { return id; }
-      };
-
-      const sections = links
-        .map((link) => document.getElementById(normalizedId(link.hash)))
-        .filter(Boolean);
-
-      let lockedId = '';
-
-      const setCurrent = (id) => {
-        const currentId = normalizedId(id);
-        links.forEach((link) => {
-          if (normalizedId(link.hash) === currentId) link.setAttribute('aria-current', 'location');
-          else link.removeAttribute('aria-current');
-        });
-      };
-
-      const updateFromPosition = () => {
-        if (lockedId) {
-          setCurrent(lockedId);
-          return;
-        }
-
-        const threshold = innerHeight * 0.28;
-        let current = sections[0];
-        for (const section of sections) {
-          if (section.getBoundingClientRect().top <= threshold) current = section;
-          else break;
-        }
-        if (current) setCurrent(current.id);
-      };
+      if (initializeReadingTrace.wired) return;
+      initializeReadingTrace.wired = true;
 
       let scrollUpdatePending = false;
       const updateOnScroll = () => {
@@ -103,7 +137,20 @@ const readingTraceInitializer = `
         scrollUpdatePending = true;
         requestAnimationFrame(() => {
           scrollUpdatePending = false;
-          updateFromPosition();
+          if (lockedId) {
+            setCurrent(lockedId);
+            return;
+          }
+          const threshold = innerHeight * 0.28;
+          const sections = tocLinks()
+            .map((link) => document.getElementById(normalizedId(link.getAttribute('href'))))
+            .filter(Boolean);
+          let current = sections[0];
+          for (const section of sections) {
+            if (section.getBoundingClientRect().top <= threshold) current = section;
+            else break;
+          }
+          if (current) setCurrent('#' + current.id);
         });
       };
 
@@ -113,16 +160,6 @@ const readingTraceInitializer = `
         updateOnScroll();
       };
 
-      const observer = new IntersectionObserver(updateFromPosition, {
-        rootMargin: '-18% 0px -68% 0px',
-        threshold: 0,
-      });
-
-      sections.forEach((section) => observer.observe(section));
-      links.forEach((link) => link.addEventListener('click', () => {
-        lockedId = normalizedId(link.hash);
-        setCurrent(lockedId);
-      }));
       window.addEventListener('scroll', updateOnScroll, { passive: true });
       window.addEventListener('wheel', releaseHashLock, { passive: true });
       window.addEventListener('touchstart', releaseHashLock, { passive: true });
@@ -132,11 +169,11 @@ const readingTraceInitializer = `
       }, { passive: true });
       if (location.hash) {
         lockedId = normalizedId(location.hash);
-        setCurrent(lockedId);
+        setCurrent(location.hash);
       }
       window.addEventListener('hashchange', () => {
         lockedId = normalizedId(location.hash);
-        setCurrent(lockedId);
+        setCurrent(location.hash);
       });
     };
 

@@ -1,9 +1,38 @@
-type TocItem = {
-  id: string;
-  label: string;
+import type { TocItem } from "@/lib/articles";
+
+type GroupNode = {
+  head: TocItem;
+  headIndex: number;
+  children: { item: TocItem; index: number }[];
 };
 
 export function ArticleToc({ items }: { items: TocItem[] }) {
+  const nodes: ({ type: "solo"; item: TocItem; index: number } | { type: "group"; group: GroupNode })[] = [];
+  let openGroup: GroupNode | null = null;
+
+  items.forEach((item, index) => {
+    if (item.depth === 2) {
+      openGroup = { head: item, headIndex: index, children: [] };
+      nodes.push({ type: "group", group: openGroup });
+    } else if (openGroup) {
+      openGroup.children.push({ item, index });
+    } else {
+      nodes.push({ type: "solo", item, index });
+    }
+  });
+
+  const renderLink = (item: TocItem, index: number) => (
+    <a
+      aria-current={index === 0 ? "location" : undefined}
+      data-depth={item.depth}
+      href={`#${item.id}`}
+      key={item.id}
+      suppressHydrationWarning
+    >
+      {item.label}
+    </a>
+  );
+
   return (
     <aside
       aria-label="文章目录"
@@ -24,14 +53,33 @@ export function ArticleToc({ items }: { items: TocItem[] }) {
       </button>
       <div className="article-toc-body" id="article-toc-body">
         <nav>
-          {items.map((item, index) => (
-            <a aria-current={index === 0 ? "location" : undefined} href={`#${item.id}`} key={item.id} suppressHydrationWarning>
-              {item.label}
-            </a>
-          ))}
+          {nodes.map((node) => {
+            if (node.type === "solo") {
+              return renderLink(node.item, node.index);
+            }
+            const { group } = node;
+            return (
+              <div className="article-toc-group" data-collapsed="false" key={group.head.id}>
+                <div className="article-toc-group-head">
+                  {group.children.length ? (
+                    <button
+                      aria-expanded="true"
+                      aria-label={`收起「${group.head.label}」小节`}
+                      className="article-toc-group-caret"
+                      suppressHydrationWarning
+                      type="button"
+                    />
+                  ) : (
+                    <span aria-hidden="true" className="article-toc-caret-slot" />
+                  )}
+                  {renderLink(group.head, group.headIndex)}
+                </div>
+                {group.children.map((child) => renderLink(child.item, child.index))}
+              </div>
+            );
+          })}
         </nav>
-        <a className="article-toc-top" href="#top">
-          <span>返回顶部</span>
+        <a aria-label="返回顶部" className="article-toc-top" href="#top">
           <span className="article-toc-top-icon" aria-hidden="true">↑</span>
         </a>
       </div>

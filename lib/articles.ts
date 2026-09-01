@@ -23,10 +23,22 @@ function plainHeading(value: string) {
     .trim();
 }
 
-export function getArticleToc(markdown: string) {
+export type TocItem = {
+  id: string;
+  label: string;
+  depth: number;
+};
+
+export function getArticleToc(markdown: string): TocItem[] {
   const slugger = new GithubSlugger();
-  return Array.from(markdown.matchAll(/^##\s+(.+)$/gm)).map((match) => {
-    const label = plainHeading(match[1]);
-    return { id: slugger.slug(label), label };
-  });
+  const items: TocItem[] = [];
+  for (const match of markdown.matchAll(/^(#{2,6})\s+(.+)$/gm)) {
+    const raw = match[2].trim();
+    const id = slugger.slug(raw);
+    const depth = match[1].length;
+    if (depth <= 3) {
+      items.push({ id, label: plainHeading(raw), depth });
+    }
+  }
+  return items;
 }

@@ -108,7 +108,7 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.ok((tocSource.match(/suppressHydrationWarning/g) ?? []).length >= 3);
   assert.match(tocSource, /aria-controls="article-toc-body"/);
   assert.match(tocSource, /aria-expanded="true"/);
-  assert.equal(tocSource.match(/<button/g)?.length, 1);
+  assert.equal(tocSource.match(/<button/g)?.length, 1 + (tocSource.match(/article-toc-group-caret/g)?.length ?? 0));
   assert.doesNotMatch(tocSource, /article-toc-toggle|article-toc-controls|article-toc-grip/);
   assert.match(tocSource, /article-toc-caret/);
   assert.match(tocSource, /article-toc-body/);
@@ -122,7 +122,8 @@ test("uses repository MDX as the only publishing source", async () => {
   assert.match(contentStyles, /\.post-hero-meta \{[\s\S]*?justify-content: center;/);
   assert.match(contentStyles, /\.article-content \{[\s\S]*?max-width: var\(--article-column\);/);
   assert.match(contentStyles, /\.article-toc-title \{[\s\S]*?font-size: 0\.81rem;[\s\S]*?font-weight: 640;/);
-  assert.match(contentStyles, /\.article-toc nav a \{[\s\S]*?font-size: 0\.79rem;[\s\S]*?font-weight: 560;/);
+  assert.match(contentStyles, /\.article-toc nav a \{[\s\S]*?font-size: 0\.8rem;[\s\S]*?font-weight: 620;/);
+  assert.match(tocSource, /article-toc-group-caret/);
   assert.match(contentStyles, /\.article-toc \{[\s\S]*?max-width: 240px;/);
   assert.match(contentStyles, /\.article-content \{[\s\S]*?grid-column: 2;/);
   assert.match(contentStyles, /\.post-hero h1 \{[\s\S]*?font-size: clamp\(2rem, 2\.9vw, 2\.7rem\);[\s\S]*?font-weight: 540;/);

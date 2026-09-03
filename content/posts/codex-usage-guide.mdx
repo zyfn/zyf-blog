@@ -1,0 +1,453 @@
+---
+title: Codex 使用指南：基础能力与日常用法
+date: 2026-07-30
+lastmod: 2026-09-01
+summary: 前半篇用一个真实任务走完全流程，建立使用 Codex 的完整体感；后半篇按主题讲清配置、权限、AGENTS.md、扩展、并行与云端；文末附命令速查。
+tags:
+  - Codex
+  - CLI
+  - Developer Tools
+cover: /images/posts/codex-usage-guide/agent-loop.svg
+featured: true
+draft: false
+---
+
+Codex 是 OpenAI 的研发 Agent：你用自然语言交代任务，它读代码、改文件、跑命令、看结果，然后继续修正，直到任务完成。它可以在你的终端、桌面应用、IDE 插件里运行，也可以在云端独立完成一个任务并把结果以分支或 PR 的形式交回来。
+
+这篇指南先用一个具体任务——“用户列表页的单元测试失败了，找出原因并修复”——从头走到尾，让你获得完整体感；再按主题讲每个领域的细节和配置。命令速查表放在文末。如果你关心的是它内部的运行机制，或者要把它接进自己的产品，可以看本站另外两篇：[在意图与行动之间：Codex Harness 如何工作](/posts/codex-agent-runtime) 与 [把 Codex 接进自己的产品：App Server 使用指南](/posts/codex-app-server-guide)。
+
+能力会随版本变化，官方用五级标签标注成熟度：Stable、Beta、Experimental、Under development、Deprecated。本文提到的实验和 Beta 能力都会标明，使用前以 `/status`、Slash 菜单和当前文档为准。[Feature maturity](https://learn.chatgpt.com/docs/feature-maturity)
+
+## 它能做什么：先看一眼全景
+
+在动手之前，先对它的能力有个整体印象：
+
+| 能力 | 说明 |
+|---|---|
+| 理解与修改代码 | 读仓库、定位问题、跨文件修改，改完给你看 diff |
+| 运行命令 | 跑测试、构建、脚本；危险操作会先征求同意 |
+| 图片理解 | 贴截图或设计稿给它，让它按图实现或对照检查 |
+| 联网搜索 | 查文档、查报错、查 API 的最新用法 |
+| 制定计划 | 大任务先出方案给你确认，再动手 |
+| 独立审查 | 对改动做一次 `/review`，充当第二双眼睛 |
+| 多任务并行 | 同时跑多个任务，各自隔离在不同 worktree 里 |
+| 云端执行 | 把任务发到云上异步完成，回来收分支或 PR |
+| 接入外部工具 | 通过 MCP 连数据库、工单系统、内部平台；通过 Apps 用 Gmail、Slack 等连接器 |
+| 记住约定 | 通过 `AGENTS.md` 和记忆，长期遵守你的项目规则 |
+| 定时任务 | 按计划或事件触发自动跑任务（桌面端与 Web） |
+| 远程控制 | 用手机控制已配对电脑上的 Codex |
+
+所有这些能力都服务于同一个工作循环：理解任务 → 在边界内行动 → 读取结果 → 继续修正。你在使用中做的每件事——交代清楚、设好边界、检查结果——都是在给这个循环喂正确的东西。
+
+<Figure
+  src="/images/posts/codex-usage-guide/agent-loop.svg"
+  alt="Codex 工作循环：理解任务与上下文，采取行动，读取结果，再根据证据继续修正"
+  caption="Codex 的基本循环：理解、行动、验证、修正。下面的 walkthrough 就是沿着这个循环走一遍。"
+/>
+
+## 你的第一个任务：从交接到验收
+
+下面用一个贯穿例子走完整个流程——“用户列表页的单元测试失败了，找出原因并修复”——你会先获得完整体感，各领域的细节和配置在后文按主题展开。
+
+### 准备：安装、登录、进入项目
+
+终端里安装 Codex CLI 后，运行 `codex`，按提示完成登录（ChatGPT 账户或 API Key 都可以），登录状态可以用 `codex login status` 检查。然后进入项目目录启动：
+
+```bash
+cd /path/to/your/repo
+codex
+```
+
+它会以当前目录为工作范围。进入后先敲一下 `/status`，确认当前模型、权限强度和剩余上下文——这个命令以后排查任何“不对劲”都用得上。
+
+终端不是唯一入口：Desktop 桌面应用适合同时盯多个任务、看 diff 和产物，还为本地项目提供 environment 配置（setup 脚本、常用 actions、内置 Git 面板）；IDE 插件适合在编辑器里快速改代码；`chatgpt.com/codex` 是云端任务入口；手机上的 Codex Remote 能控制已配对的电脑。本篇以 CLI 为例，概念在各入口通用。[ChatGPT desktop app](https://learn.chatgpt.com/docs/app) · [Local environment](https://learn.chatgpt.com/docs/environments/local-environment) · [IDE extension](https://learn.chatgpt.com/docs/codex/ide)
+
+### 交代任务：三句话，说清目标、范围、验收
+
+任务交代得越清楚，返工越少。实用的模板是三句话：
+
+```text
+目标：用户列表页单测失败，找出原因并修复。
+范围：只改列表页相关代码和测试，不动分页 API 以外的接口。
+验收：npm test 全绿，列表页渲染行为不变。
+```
+
+没写验收条件的任务，做完了你也无法判断对不对——哪怕只写一句“改完运行 `npm test` 全绿”，也比没有强。
+
+这个任务边界清楚，直接发就行。如果换成“把列表页改成后端分页”这种波及多个文件的任务，先 `/plan`：它会调查代码、给出方案和步骤，你确认或纠正后它再动手。报错截图、设计稿这类图片也可以直接粘贴进对话，或用 `codex -i screenshot.png "按这个图修"` 传入。[Image inputs](https://learn.chatgpt.com/docs/image-inputs)
+
+### 看它工作：读什么、问什么、怎么插话
+
+发完任务，你会看到它开始读测试文件、组件代码和最近的提交。这时注意两件事：
+
+**它问你，就是你在检查它。** 视权限设置，它执行命令或写文件前会弹出审批，比如“要运行 `npm test`，允许吗”。审批弹窗是你查看它意图的最好时机：命令对不对、范围该不该，一眼就能判断。日常建议保留这种询问，不要为了省事全部放行。三种沙箱模式和审批策略怎么配，见后文“权限与沙箱”。
+
+**中途想插话，直接打字。** 比如你看到它在翻无关的目录，直接输入“只看 `src/pages/users` 和对应测试”，它会带着这条补充继续当前任务。补充写成“加个约束”比“推翻重来”有效。如果方向彻底错了，可以中断它，但记住：**中断只是停止继续，不会撤销已经做的修改**——中断后先 `/diff` 看它改到哪了，再决定继续还是清理。
+
+输入框里还有几个顺手的小动作：`@` 搜索并附加仓库文件；`!` 前缀直接跑一条本地命令；`Tab` 把要说的话排队到下一回合；`Ctrl+R` 搜索历史输入。
+
+### 验收结果：它说修好了，不算修好
+
+它回复“已修复，测试通过”。现在做三步检查：
+
+1. `/diff`——看它实际改了什么，包括新增的未跟踪文件；
+2. 看测试是不是真的跑过、输出是不是全绿，而不是听它复述；
+3. `/review`——让它以审查者视角再看一遍自己的改动。命令行里还有独立的 `codex review`，可以审查未提交改动、指定基线或某个提交。
+
+验收时把它的交付分成三类过一遍：**实际跑过并得到结果的**（命令、测试、构建）；**从代码推断但没验证的**；**仍然未知的**。混淆这三类——尤其是把推断说成验证过——是 Agent 交付里最常见的质量问题。`/review` 是第二意见，不是安全证明；认证、支付、密钥相关代码仍要人工细看。[Codex Security](https://learn.chatgpt.com/docs/security)
+
+### 让下次更顺：把这次踩的坑写进契约
+
+这个任务里可能暴露了一些“它本该知道但不知道”的事：比如它用了全局 `npm` 而项目要求用内网脚本，或者它顺手改了不该碰的快照文件。这类教训的归宿是仓库根目录的 `AGENTS.md`——Codex 每次启动都会读它：
+
+```markdown
+- 使用 `./scripts/ci.sh test` 跑测试，不要用全局 npm。
+- 快照文件由专用命令更新，不要手改。
+- 完成前运行 `npm test`，全绿才算完成。
+```
+
+用 `/init` 可以生成骨架，然后人工精简。你个人的通用习惯（比如“回复用中文”）写在 `~/.codex/AGENTS.md`，对所有项目生效。完整写法见后文“为仓库写契约”一节。
+
+另外两件事顺手做了：跨会话的偏好可以交给记忆（实验能力，默认关闭，`/memories` 管理）；这次对话如果很长，`/compact` 压缩历史，下次开工 `/resume` 恢复。
+
+到这里，一个任务的完整闭环就走完了：交代 → 观察 → 验收 → 沉淀。体感有了；每个环节背后的选项和细节，从下一节开始按主题展开。
+
+## 配置：让 Codex 按你的方式工作
+
+Codex 的大部分行为都可以配置。配置文件在 `~/.codex/config.toml`，这是日常调教它的主战场。[Configuration basics](https://learn.chatgpt.com/docs/config-file/config-basic)
+
+### 配置从哪里来：六层合并
+
+配置不是只有一份，它按从高到低的优先级合并：
+
+```text
+命令行参数（--config、--model 等）
+  → 项目配置 .codex/config.toml（仅受信任项目）
+  → Profile（--profile 指定）
+  → 用户配置 ~/.codex/config.toml
+  → 系统配置 /etc/codex/config.toml
+  → 内置默认值
+```
+
+理解这个顺序能解释大多数“配置没生效”的困惑：不是你写错了，而是被更高优先级的一层盖住了。两个实践要点：
+
+- **项目配置只在项目被信任时加载**。不可信项目会跳过仓库里 `.codex/` 下的全部配置、Hooks 和规则，这是一道安全防线；
+- 临时改一个值不必动文件：`codex --config sandbox_workspace_write.network_access=true` 可以一次性覆盖。
+
+配置不生效时的排查工具是 `/debug-config`：它打印每一层配置的来源和生效策略，比盯着单个文件猜有效得多。更彻底的体检用 `codex doctor`，覆盖安装、认证、运行时和 Git 环境。[Advanced configuration](https://learn.chatgpt.com/docs/config-file/config-advanced)
+
+### Profile：一套配置多个场景
+
+需要“本地开发”“只读审查”“无人值守跑批”几套配置来回切时，用 Profile：为每个场景建一份 `~/.codex/<名字>.config.toml`，启动时 `codex --profile deep-review` 加载，叠加在你的基础配置之上。注意 0.134.0 之后这是唯一写法——旧的 `[profiles.xxx]` 表已废弃，网上抄来的老配置要迁移。
+
+### 主要管什么：常用字段一览
+
+| 配置域 | 代表字段 | 决定什么 |
+|---|---|---|
+| 模型与推理 | `model`、`model_reasoning_effort`、`review_model` | 用哪个模型、想多深、`/review` 用什么模型 |
+| 审批与沙箱 | `approval_policy`、`sandbox_mode` | 什么时候问你、能碰哪些范围（见“权限与沙箱”） |
+| 网络与搜索 | `sandbox_workspace_write.network_access`、`web_search` | 沙箱内出站网络开关；搜索模式（`cached` 默认、`live` 实时等四种） |
+| 指令来源 | `model_instructions_file`、`developer_instructions` | 用别的文件替代 `AGENTS.md`、注入额外指令 |
+| MCP 服务器 | `[mcp_servers.<名字>]` | 声明要连的外部工具（见“扩展能力”） |
+| 环境变量 | `[shell_environment_policy]` | 哪些环境变量传给子进程；`inherit = "core"` 是较稳的起点 |
+| 历史与会话 | `[history]`、`[tui]` | 历史保存上限、通知方式、恢复行为等终端体验 |
+| 子 Agent | `[agents]` | 并发上限、默认角色模型 |
+| 完成通知 | `notify` | Turn 结束时执行外部命令，接 webhook 或桌面提醒 |
+
+完整的字段参考在官方 [Configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)。一个实用的技巧：在 `config.toml` 顶部写一行 `#:schema` 指向官方 JSON Schema，配合 TOML 编辑器插件可以获得补全和校验。
+
+一份偏本地开发的配置示例：
+
+```toml
+model_reasoning_effort = "high"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "cached"
+
+[sandbox_workspace_write]
+network_access = false
+
+[shell_environment_policy]
+inherit = "core"
+```
+
+如果你在公司环境，组织还可能下发一份 `requirements.toml` 托管配置，强制限定可选的模型、权限和扩展范围，个人配置无法覆盖它——遇到“选项被锁住”时先想到这一层。[Managed configuration](https://learn.chatgpt.com/docs/enterprise/managed-configuration)
+
+### 模型、速度与额度
+
+**选模型。** `/model`（或 `--model`）切换模型，推理强度从 Low 到 Extra High 可选。原则很简单：日常改动用默认推荐，疑难调试换强模型或调高推理强度，重复性小活用快模型。Cloud 任务目前不能改默认模型。[Models](https://learn.chatgpt.com/docs/models)
+
+**Fast 模式。** `/fast` 开关，约 1.5 倍速度，代价是按倍率多消耗 ChatGPT 额度（不同模型倍率不同）。赶时间时开，平时关。[Speed](https://learn.chatgpt.com/docs/agent-configuration/speed)
+
+**额度。** `/usage` 查看 token 用量和限额，支持按天、周和累计查看。
+
+## 权限与沙箱：它能碰什么，什么时候问你
+
+第一个任务里你见过的审批弹窗，背后是两套互相配合的机制：沙箱决定**技术上能碰什么**，审批决定**什么时候必须先问你**。这里是这两个概念的完整说明。[Sandboxing](https://learn.chatgpt.com/docs/sandboxing)
+
+**沙箱有三种模式：**
+
+- `read-only`：只读，不能改文件、不能跑命令（除非逐一审批）；
+- `workspace-write`：日常默认，工作区内可读可写，网络默认关闭；注意 `.git` 等目录在部分环境仍只读，所以 `git commit` 可能触发审批；
+- `danger-full-access`：无限制，只在明确需要时用。
+
+**审批策略常用的两种：** `untrusted`（可信集之外都问）和 `on-request`（沙箱内自主，越界才问）。交互式使用推荐后者。另外还有一个细粒度的 `granular` 写法，可以分类设置沙箱升级、MCP 询问、Skill 脚本等各自要不要问。
+
+**自动审查（Auto-review）。** 开启后，越界动作先交给一个独立的审查角色判断，而不是每次都弹窗问你。它只是换了审批人，并不扩大沙箱边界；审查连续拒绝会触发熔断让任务停下，此时你判断没问题，可以用 `/approve` 对最近一条拒绝做一次重试。[Auto-review](https://learn.chatgpt.com/docs/sandboxing/auto-review)
+
+**选档与日常调整。** `/permissions` 可以在 Auto、只读等强度之间切换。对高影响任务，建议按阶段放权：先只读调查，再允许写工作区，推送和部署单独审批。两个提醒：
+
+- 想让它访问工作区外的目录，用 `--add-dir` 加目录，而不是直接上 full access；
+- `danger-full-access` 配 `approval_policy = "never"`（即 `--yolo`）等于拆掉所有防线，只适合一次性、可整体丢弃的隔离环境。
+
+还有两个进阶机制，知道存在即可：Beta 阶段的 permission profiles（`:read-only`、`:workspace` 等），用文件与网络的细粒度规则替代旧沙箱模式，两者互斥、正在演进；实验性的 `.rules` 命令规则（Starlark 语法，可内联测试用例），适合长期固化命令白名单。[Permissions](https://learn.chatgpt.com/docs/permissions) · [Rules](https://learn.chatgpt.com/docs/agent-configuration/rules)
+
+## 为仓库写契约：AGENTS.md 完整写法
+
+上半篇你在踩坑之后写了一份 `AGENTS.md`。这一节讲完整规则。`AGENTS.md` 是仓库级的长期指令：每次启动都会被读取、拼进模型的输入，决定 Codex 在这个项目里怎么干活。写好它是投入产出比最高的一件事。[AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md)
+
+### 它从哪里来：两层发现规则
+
+- **全局层**：`~/.codex/AGENTS.md`，对所有项目生效——你的个人通用习惯写在这里。桌面端的“自定义指令”也是写进这份文件；
+- **项目层**：从仓库根一路走到当前目录，每层最多取一个指令文件，越靠近当前目录优先级越高。子目录放一份，就对该子目录下的任务追加规则，适合 monorepo 里按模块立规矩。
+
+全部指令加起来默认不超过 32 KiB，超出就停止追加。每一层还支持一份 `AGENTS.override.md`：存在时优先，删掉即恢复——临时调试或试验新规则时用它，不用动正式文件。
+
+### 写什么：四类最值得写的内容
+
+```markdown
+# Repository contract
+
+- 使用 `./mvnw`，不要依赖机器全局 Maven。
+- `api` 只能依赖 `application`，不得直接访问 `infra`。
+- 修改公开 Schema 时同时更新兼容性测试和迁移说明。
+- 完成前运行 `./mvnw verify -Pci`。
+- 未经明确授权，不推送分支、不部署、不写生产数据。
+```
+
+拆开看，这份契约覆盖了四类内容，也是你写自己仓库时的清单：
+
+1. **构建与验证命令**：怎么编译、怎么跑测试、完成前必须跑什么。模型猜不对你的构建方式，这是最常省错的力气；
+2. **架构与模块边界**：谁能依赖谁、公共接口在哪、生成文件的更新规则；
+3. **禁改区域与危险动作**：哪些目录不碰、哪些操作（推送、部署、写生产）必须先问；
+4. **隐含约定**：工具链偏好、提交风格、环境问题——所有模型从代码里看不出来的东西。
+
+### 怎么写好
+
+- **从 `/init` 开始，然后删。** `/init` 生成的骨架里大半是显然事实，人工精简到只剩隐含约定；
+- **一条一句话，具体可执行。** “用 `./mvnw`，不要用全局 Maven”远好于“注意构建方式”——规则越具体，模型越不会自由发挥；
+- **每条都该来自一次真实的坑。** 最好的契约是伤疤的登记处：这条规则是从哪次失败、返工或误改里长出来的？答不上来的条目，多半是可以删掉的常识；
+- **短比全重要。** 契约内容每次请求都会进入模型输入，写得太多会稀释真正重要的约定，还挤占任务本身的上下文空间。
+
+### 不写什么
+
+- **密钥和凭证**：永远不进契约，也不进记忆和 Skill；
+- **一次性任务要求**：这次会话特有的目标直接说，不要污染长期文件；
+- **实时数据**：API 清单、依赖版本、工单状态这类会过期的内容，让它现查而不是背下来；
+- **常识与框架文档**：模型本来就知道的东西只会增加噪声；
+- **该进配置的东西**：模型、权限、沙箱、MCP 归 `config.toml` 管；契约管的是“这个仓库怎么干活”，两者分工不要混。记忆也只适合辅助回忆，必须每次生效的硬规则进契约。[Memories](https://learn.chatgpt.com/docs/customization/memories)
+
+### 确认它真的生效了
+
+指令没有按预期起作用时，先别怀疑模型，先验证加载：在会话里让它“总结当前的指令”，或者用 `codex --ask-for-approval never "Summarize the current instructions."` 快速检查。常见的失效原因是文件放错了层级、被更近的文件覆盖，或者总量超过了 32 KiB。
+
+两个延伸用法：云端任务同样会读仓库里的 `AGENTS.md`（用它找 lint 和测试命令），所以契约对 Cloud 也生效；如果用 Codex 做 GitHub 代码评审，可以在最贴近代码的 `AGENTS.md` 里加一个 `## Code Review Rules` 段落定制评审规则。
+
+## 扩展能力：接入你的工具
+
+基础能力之外，Codex 可以挂载四类扩展，按需了解：
+
+| 扩展 | 一句话理解 | 什么时候用 | 入口 |
+|---|---|---|---|
+| MCP | 把它连上外部工具和数据 | 要查数据库、工单、内部平台时 | `codex mcp add`、`/mcp` |
+| Skills | 给它一份可复用的做事方法 | 发布流程、迁移步骤这类固定套路 | `$技能名`、`/skills` |
+| Hooks | 在特定时机自动做一件事 | 每次改完代码自动格式化、校验 | `/hooks` 审查与信任 |
+| Plugins | 把上面几种打包分发 | 团队共享一套能力时 | `/plugins` |
+
+**MCP**：在 `config.toml` 里用 `[mcp_servers.<名字>]` 声明一个服务器（本地命令或远程 URL），桌面端、CLI、IDE 共享同一份配置。需要 OAuth 的服务器用 `codex mcp login <名字>` 登录；常用工具调用可以按服务器设置审批强度。官方列过一批常用服务器：Figma、Playwright、Sentry、GitHub 等。[MCP](https://learn.chatgpt.com/docs/extend/mcp)
+
+**Skills**：一个目录加一份 `SKILL.md` 说明。Codex 平时只看到技能的名字和描述，判断相关时才读全文——所以技能不会白白占用上下文。调用方式：`$技能名` 显式唤起，或者让模型按描述自己匹配。技能从仓库的 `.agents/skills`、用户目录等位置发现；`$skill-creator` 可以交互式创建，`$skill-installer` 一行安装现成的。[Build skills](https://learn.chatgpt.com/docs/build-skills)
+
+**Hooks**：在会话开始、工具执行前后、压缩前后等 11 个生命周期点上挂脚本，可以注入上下文、改写参数甚至拦截动作。安全起见，非托管的 Hook 必须先在 `/hooks` 里审查并信任，内容一改就要重新审查。[Hooks](https://learn.chatgpt.com/docs/hooks)
+
+**Apps**：除了自己配的 MCP，还可以用 ChatGPT 生态的连接器（Gmail、Slack、GitHub 等），`/apps` 浏览，用 `$app名` 附加进对话。[Apps](https://learn.chatgpt.com/docs/plugins)
+
+初次使用不必急着上扩展，等遇到“这个事它总做不对”或“这个数据它拿不到”时，再回来对号入座。扩展和命令一样受权限管理：Skill 脚本仍会经过审批，安装第三方扩展前先看它的来源和内容。
+
+## 并行与长任务：同时推进多件事
+
+**开新对话，不打断当前任务。** `/side` 开一个临时小对话问个不相干的问题，不污染主任务的上下文；`/fork` 从当前会话分叉一份新对话去试别的方案。
+
+**让每个任务有自己独立的代码。** 桌面端可以用 `/worktree` 或在新建聊天时选 Worktree 环境，让任务在独立的 Git worktree 中运行，改坏了也不影响主工作区，多个聊天可以真正并行。两个细节：托管 worktree 默认以 detached HEAD 开始；被 git 忽略的 `.env` 这类文件不会自动跟过去，需要的话在仓库放一份 `.worktreeinclude` 列出要复制的文件。注意这是桌面端能力，CLI 里需要自己用 `git worktree` 管理。worktree 只隔离文件，数据库、端口这类共享资源还是要自己当心。[Git worktrees](https://learn.chatgpt.com/docs/environments/git-worktrees)
+
+**把独立的小任务委派出去。** 调查类工作（比如“查清这个报错的所有可能原因”）可以交给 Subagent 单独去做，做完把结论带回来；内置角色有通用的 `default`、干活的 `worker` 和只读的 `explorer`，也可以在 `.codex/agents/` 下定义自己的角色。`/agent` 切换查看。注意每个 Subagent 都独立消耗 token，读多写少的任务适合并行，写密集的任务谨慎。[Subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents)
+
+**围绕大目标持续推进。** `/goal` 设定一个持久目标，让它跨多个回合往目标推进（目标文本同时是完成判据，上限 4000 字符）；子命令可以暂停、恢复、编辑。[Long-running work](https://learn.chatgpt.com/docs/long-running-work)
+
+**管理后台命令。** 长任务里它在后台跑的构建和测试，用 `/ps` 查看，`/stop` 停止。
+
+**定时任务。** 桌面端和 Web 还支持定时任务：按计划或按 GitHub、Gmail 等事件触发，在项目目录或隔离 worktree 里自动跑。[Scheduled tasks](https://learn.chatgpt.com/docs/automations)
+
+## 走出本机：云端与自动化
+
+**Codex Cloud：异步交付。** 适合“边界清楚、环境可重建”的任务：把任务发到云端隔离环境，它完成后交付总结、diff 和 PR，你回来审查。入口很多：`chatgpt.com/codex`、桌面端的 `/cloud`、CLI 的 `codex cloud`；`codex apply` 还能把最近一次云端任务的 diff 直接打到本地仓库。几个使用前提：
+
+- 云端环境要单独配置（默认提供预装常见工具链的 universal 镜像），本机的未提交改动和私有服务它拿不到；
+- 环境变量全程可用，但 Secrets 只在安装依赖的 setup 阶段可见，进入任务执行前会被移除；
+- 任务执行阶段默认断网，需要联网要显式开启并配域名白名单——这是防提示注入的设计。[Codex cloud](https://learn.chatgpt.com/docs/cloud) · [Cloud environment](https://learn.chatgpt.com/docs/environments/cloud-environment)
+
+**GitHub Action：让它在仓库事件里干活。** `openai/codex-action` 可以在 PR、Issue 事件里跑 `codex exec`，做自动审查、修复和维护。安全基线值得照抄：限制触发者、清洗 PR 内容防注入、API Key 不要放进会执行仓库代码的 job。[GitHub Action](https://learn.chatgpt.com/docs/github-action)
+
+**脚本里用它：`codex exec`。** 非交互执行，适合脚本和 CI：进度走 stderr、最终结果走 stdout，方便管道；`--json` 输出结构化事件流，`--output-schema` 可以约束最终回复符合 JSON Schema。它默认以只读沙箱运行，需要写权限要显式加 `--sandbox`。[Non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode)
+
+**程序里用它：SDK。** TypeScript SDK（`@openai/codex-sdk`）在你的代码里启动、继续本地任务；Python SDK（`openai-codex`）建立在 App Server 之上，还暴露沙箱预设和异步接口。两者封装的层次不同，选型时看你需要的是“跑一次任务”还是“管理线程生命周期”。[Codex SDK](https://learn.chatgpt.com/docs/codex-sdk)
+
+再进一步，把 Codex 整体接进自己的产品（自建 UI、会话管理），要用 App Server——那已经是平台开发的范畴，见本站 [App Server 使用指南](/posts/codex-app-server-guide)。[App Server](https://learn.chatgpt.com/docs/app-server)
+
+## 速查与附录
+
+### 常见问题速查
+
+| 现象 | 多半是 | 怎么办 |
+|---|---|---|
+| 感觉它“变笨了” | 模型、配置或上下文不对 | `/status` 看现场，`/debug-config` 看配置来源 |
+| 整体环境不对劲 | 安装、认证或运行时问题 | `codex doctor` 做一次体检 |
+| 写的规则没生效 | `AGENTS.md` 位置不对、被覆盖或超 32 KiB | 检查文件层级（近者优先），让它“总结当前指令”验证 |
+| 仓库里的配置没生效 | 项目未受信任 | 确认项目信任状态；不可信项目跳过 `.codex/` 配置 |
+| 中途补充没反应 | 它在等当前这一步执行完 | 稍等；确实跑偏了再中断 |
+| 中断后工作区乱了 | 中断不撤销已做的修改 | `/diff` 检查，恢复不要的文件 |
+| 说完成了但没验证 | 任务没写验收条件 | 让它跑测试，自己过一遍 `/diff` |
+| 对话太长、响应变慢 | 上下文接近上限 | `/compact` 压缩，重要结论先存档 |
+| 昨天的任务想继续 | 会话可以恢复 | `/resume` 选择上次的会话 |
+| 额度用超了想重置 | `/usage` 里有重置入口 | `/usage` 查看并兑换重置额度 |
+
+### 容易被忽略的小功能
+
+官方文档里还有一些值得知道的细节：
+
+- **`notify` 配置**：任务回合结束时自动执行你指定的命令，可以接桌面通知或 CI 提醒；
+- **`file_opener`**：把输出里的文件引用变成可点击链接，直接在你的编辑器（vscode、cursor 等）打开；
+- **`--search`**：临时来一次实时搜索，不改默认搜索配置；
+- **`codex sandbox`**：用 Codex 同款的沙箱策略手动跑一条命令，测试权限边界很方便；
+- **`codex debug prompt-input`**：打印模型这次真正看到的输入列表，排查上下文问题的利器；
+- **`/import`**：从 Claude Code 或 Cursor 迁移配置、项目和最近的聊天；
+- **`Esc Esc`**：编辑上一条输入并从那里分叉，换个说法重来一遍；
+- **`/statusline`、`/theme`、`/keymap`、`/pets`**：终端外观与快捷键的个性化全家桶。
+
+### 命令速查与官方资料
+
+#### 八个值得先记住的命令
+
+```text
+/status      确认模型、权限、上下文——排查一切问题的起点
+/plan        大任务先出方案，确认后再动手
+/mention     把相关文件带进对话，聚焦范围
+/diff        看它实际改了什么
+/review      让它独立审查一遍改动
+/permissions 按任务调整权限强度
+/compact     对话过长时压缩上下文
+/resume      恢复之前的会话
+```
+
+#### Codex CLI / TUI 内置 Slash 命令
+
+> 基线：OpenAI 官方 [CLI built-in slash commands](https://learn.chatgpt.com/docs/developer-commands?surface=cli)，核对日期 2026-08-10。
+> 下表共 **50 个官方命令条目**；其中 3 行包含官方别名，所以共有 **53 种命令拼写**。
+> 运行中排队：当前回合尚未结束时，可输入命令后按 `Tab`，让它在下一回合执行。
+
+| 命令 | 作用 | 什么时候用 |
+|---|---|---|
+| `/permissions` | 调整无需询问即可执行的动作 | 在 Auto、只读等权限强度之间切换 |
+| `/ide` | 带入打开文件、选区等 IDE 上下文 | 下一步需要当前编辑器现场时 |
+| `/keymap` | 查看并修改 TUI 快捷键 | 将自定义按键持久化到配置 |
+| `/vim` | 切换 Composer 的 Vim 模式 | 使用 Normal / Insert 编辑习惯时 |
+| `/setup-default-sandbox` | 安装增强的 Windows Sandbox | 仅 Windows；替换降级沙箱 |
+| `/sandbox-add-read-dir` | 给 Windows Sandbox 增加只读目录 | 仅 Windows；读取当前根之外的绝对路径 |
+| `/agent`、`/subagents` | 切换当前子 Agent 线程 | 查看或继续某个已生成 Agent 的工作 |
+| `/apps` | 浏览 Apps / Connectors，并插入 `$app-slug` | 将外部应用显式附加到 Prompt |
+| `/plugins` | 浏览、安装和管理插件 | 检查插件能力或可用状态 |
+| `/hooks` | 查看、信任或禁用生命周期 Hooks | 新 Hook 或内容变化后审查 |
+| `/clear` | 清屏并开始全新 Chat | 同时重置可见界面和上下文 |
+| `/rename` | 重命名当前 Chat | 让保存的会话容易识别 |
+| `/archive` | 归档当前 Session 并退出 | 从活跃列表移走，但保留记录 |
+| `/delete` | 永久删除当前 Session 及其后代并退出 | 确定归档仍不够时；不可恢复地使用 |
+| `/compact` | 压缩可见对话，释放 Context | 长任务接近上下文上限时 |
+| `/copy` | 复制最近完成的回复或 Plan | 无需手选文本；也可用 `Ctrl+O` |
+| `/diff` | 显示 Git diff，包括未跟踪文件 | 提交或测试前检查改动 |
+| `/exit` | 退出 CLI，与 `/quit` 等价 | 离开当前 CLI 会话 |
+| `/experimental` | 开关实验能力 | 试用 Network proxy、防休眠等实验项 |
+| `/approve` | 批准最近一次 Auto-review 拒绝动作的单次重试 | 明确判断该动作可安全重试时 |
+| `/memories` | 开关 Memory 注入或生成 | 管理当前会话的记忆行为 |
+| `/skills` | 浏览和选择 Skill | 显式使用适合当前任务的方法包 |
+| `/import` | 导入受支持的 Claude Code 配置、项目和最近 Chat | 从 Claude Code 迁移到 Codex |
+| `/feedback` | 发送反馈、日志和诊断信息 | 报告问题或向支持提供现场 |
+| `/init` | 在当前目录生成 `AGENTS.md` 骨架 | 初次为仓库建立持久指令 |
+| `/logout` | 退出 Codex 账户 | 共享机器上清除本地凭证 |
+| `/mcp` | 列出 MCP 工具；`verbose` 查看服务器详情 | 确认外部工具是否连接 |
+| `/mention` | 将文件或目录附加到 Chat | 明确下一步需要检查的代码范围 |
+| `/model` | 选择模型及可用的推理强度 | 在任务开始前调整能力和成本 |
+| `/fast` | 开关模型目录提供的 Fast 服务层 | 当前模型支持 Fast tier 时 |
+| `/plan` | 进入 Plan 模式，可同时发送问题 | 多步骤或高风险改动前先形成方案 |
+| `/goal` | 设置、查看、编辑、暂停、恢复或清除持久目标 | 需要围绕一个大目标持续推进时 |
+| `/personality` | 选择回复风格 | 调整简洁、解释性或协作风格 |
+| `/ps` | 查看后台终端及最近输出 | 检查长时间运行的命令 |
+| `/stop` | 停止当前 Session 的所有后台终端 | 取消后台构建、测试或服务 |
+| `/fork` | 从当前 Chat 分叉新 Chat | 探索另一方案而不破坏现有上下文 |
+| `/app` | 在桌面 App 中继续当前 Session | 从 TUI 转移到 macOS / Windows App |
+| `/side`、`/btw` | 启动临时 Side Chat | 问一个不应干扰主上下文的问题 |
+| `/raw` | 切换原始 Scrollback | 长输出中更方便选择和复制文本 |
+| `/resume` | 从列表恢复已保存 Chat | 继续之前的 CLI 工作 |
+| `/new` | 在同一 CLI 中开始全新 Chat | 保留当前仓库，但清空 Chat 上下文 |
+| `/quit` | 退出 CLI | 结束当前 CLI 会话 |
+| `/review` | 审查当前工作树 | Agent 完成后或提交前复核 |
+| `/status` | 显示模型、权限、可写根、Token 等 Session 状态 | 确认真实运行配置和剩余上下文 |
+| `/usage` | 查看账户 Token 使用或限额重置信息 | 检查日、周或累计使用情况 |
+| `/debug-config` | 输出配置层和 requirements 诊断 | 排查优先级、策略和实验网络约束 |
+| `/statusline` | 交互配置 TUI 底部状态字段 | 持久化模型、Context、Git、Token 等显示 |
+| `/title` | 配置终端窗口或 Tab 标题字段 | 显示项目、任务进度、分支或模型 |
+| `/theme` | 选择语法高亮主题 | 预览并保存终端主题 |
+| `/pets`、`/pet` | 选择或隐藏 TUI Pet | 个性化终端环境 |
+
+#### Desktop App 与 IDE Composer 固定 Slash 命令
+
+> 基线：OpenAI 官方 [Slash commands reference](https://learn.chatgpt.com/docs/reference/slash-commands)，核对日期 2026-08-10。
+> Desktop App 下表共 **24 个固定命令**。可用性受环境、账户和组织策略影响；它不是 CLI 命令表的子集。
+
+| 命令 | 作用 | 条件或提醒 |
+|---|---|---|
+| `/approve` | 批准最近一次 Auto-review 拒绝动作的单次重试 | 仅在自动审查启用且存在最近拒绝时 |
+| `/cloud` | 在 Cloud 中运行 Chat | 需要账户具备 Cloud execution |
+| `/cloud-environment` | 为 Chat 选择 Cloud 环境 | 与项目云环境配置配合 |
+| `/compact` | 压缩当前 Chat 上下文 | 长任务释放 Context |
+| `/fast` | 开关模型目录提供的 Fast tier | 仅可用时出现 |
+| `/feedback` | 打开反馈窗口，可附带日志 | 用于问题反馈和诊断 |
+| `/fork` | 将本地 Chat 复制为新本地 Chat 或 worktree | 分支探索或隔离实现 |
+| `/goal` | 设置持久目标 | 官方建议先用 `/plan` 把目标定义清楚 |
+| `/ide-context` | 开关 IDE 共享上下文 | 控制编辑器信息是否进入 Chat |
+| `/init` | 生成当前项目的 `AGENTS.md` 骨架 | 生成后仍需人工精简 |
+| `/local` | 在选中的本地项目运行 Chat | 需要已选择本地项目 |
+| `/mcp` | 打开 MCP 状态 | 查看连接的服务器 |
+| `/memories` | 配置 Memory 使用或生成 | 仅 Memories 可用时 |
+| `/model` | 选择当前 Chat 模型 | 可选项受账户和组织策略影响 |
+| `/pet` | 唤醒或收起 Desktop Pet | 桌面个性化功能 |
+| `/personality` | 选择 Codex 回复风格 | 仅当前模型支持时 |
+| `/plan` | 开关 Plan 模式 | 多步骤任务先规划 |
+| `/project` | 为新 Chat 选择项目 | 决定项目上下文 |
+| `/reasoning` | 选择当前 Chat 的推理强度 | 任务越复杂不代表必须始终最高 |
+| `/review` | 审查未提交改动或与基线分支比较 | 进入代码审查模式 |
+| `/side` | 启动不打断主 Chat 的临时 Side Chat | 临时问题不污染主上下文 |
+| `/status` | 显示 Chat ID、Context 使用量和限额 | 排查现场的首选命令 |
+| `/task` | 启动不绑定项目的 Chat | 适合一般任务 |
+| `/worktree` | 在新 Git worktree 中运行 Chat | 隔离并行代码修改 |
+
+IDE 插件的固定集合为上表除 `/pet`、`/task` 外的 **22 个命令**；官方参考：[IDE developer commands](https://learn.chatgpt.com/docs/developer-commands?surface=ide)。此外，已启用的 Skills、自定义 Prompt（`/prompts:<name>`）和 Plugin 会动态出现在 Slash 菜单里——运行时输入 `/` 看到的才是本机的完整集合。
+
+#### 官方资料索引
+
+- [Codex CLI](https://learn.chatgpt.com/docs/codex/cli) · [ChatGPT desktop app](https://learn.chatgpt.com/docs/app) · [IDE extension](https://learn.chatgpt.com/docs/codex/ide) · [Codex cloud](https://learn.chatgpt.com/docs/cloud)
+- [Configuration basics](https://learn.chatgpt.com/docs/config-file/config-basic) · [Advanced configuration](https://learn.chatgpt.com/docs/config-file/config-advanced) · [Configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference) · [Environment variables](https://learn.chatgpt.com/docs/config-file/environment-variables)
+- [AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md) · [Memories](https://learn.chatgpt.com/docs/customization/memories) · [Models](https://learn.chatgpt.com/docs/models) · [Speed](https://learn.chatgpt.com/docs/agent-configuration/speed)
+- [Sandboxing](https://learn.chatgpt.com/docs/sandboxing) · [Auto-review](https://learn.chatgpt.com/docs/sandboxing/auto-review) · [Permissions](https://learn.chatgpt.com/docs/permissions) · [Approvals and security](https://learn.chatgpt.com/docs/agent-approvals-security)
+- [Skills](https://learn.chatgpt.com/docs/build-skills) · [Hooks](https://learn.chatgpt.com/docs/hooks) · [MCP](https://learn.chatgpt.com/docs/extend/mcp) · [Plugins](https://learn.chatgpt.com/docs/plugins) · [Subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents)
+- [Git worktrees](https://learn.chatgpt.com/docs/environments/git-worktrees) · [Local environment](https://learn.chatgpt.com/docs/environments/local-environment) · [Cloud environment](https://learn.chatgpt.com/docs/environments/cloud-environment) · [Long-running work](https://learn.chatgpt.com/docs/long-running-work) · [Scheduled tasks](https://learn.chatgpt.com/docs/automations)
+- [Non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode) · [Codex SDK](https://learn.chatgpt.com/docs/codex-sdk) · [App Server](https://learn.chatgpt.com/docs/app-server) · [GitHub Action](https://learn.chatgpt.com/docs/github-action)
